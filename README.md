@@ -9,12 +9,12 @@ A web-based local network monitoring tool that discovers network devices via SNM
 - **Real-time Monitoring**: Interface counters, errors, discards with Prometheus metrics
 - **Device Management**: Search, filter, and inspect devices and interfaces
 - **REST API**: Full API for integration with external tools
-- **TDD/BDD**: Comprehensive test coverage with pytest and vitest
+- **TDD/BDD**: Comprehensive test coverage with pytest 8.4.2 and vitest 3.2.4
 
 ## Architecture
 
-- **Backend**: Python 3.11+, FastAPI, SQLAlchemy (SQLite), APScheduler, Prometheus
-- **Frontend**: React 18, Vite, vis-network for graph visualization
+- **Backend**: Python 3.11+, FastAPI 0.119.1, SQLAlchemy 2.0.44 (SQLite), APScheduler 3.11.0, Prometheus Client 0.23.1
+- **Frontend**: React 19.2.0, Vite 7.1.11, vis-network 10.0.2 for graph visualization
 - **Time Series**: Prometheus scrape endpoint (VictoriaMetrics recommended)
 - **Discovery**: SNMP polling with fallback to ARP tables and CDP
 
@@ -23,7 +23,7 @@ A web-based local network monitoring tool that discovers network devices via SNM
 ### Prerequisites
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 18+ (tested with Node.js 20+)
 - Network access to SNMP-enabled devices
 
 ### Installation
@@ -56,7 +56,7 @@ A web-based local network monitoring tool that discovers network devices via SNM
    ```bash
    make ui
    ```
-   - UI available at: http://localhost:5173
+   - UI available at: http://localhost:5170
 
 ### Testing
 
@@ -114,6 +114,25 @@ Configure SNMP community strings and credentials in the discovery service:
 
 **Edges:**
 - id, src_device_id, src_if_index, dst_device_id, dst_if_index, link_type, vlan_tags, confidence
+
+## Current Library Versions
+
+### Backend Dependencies
+- **FastAPI**: 0.119.1 - Modern, fast web framework for building APIs
+- **Uvicorn**: 0.38.0 - ASGI server for FastAPI
+- **SQLAlchemy**: 2.0.44 - SQL toolkit and ORM
+- **APScheduler**: 3.11.0 - Advanced Python Scheduler
+- **Prometheus Client**: 0.23.1 - Prometheus metrics client
+- **Pydantic**: 2.12.3 - Data validation using Python type annotations
+- **pytest**: 8.4.2 - Testing framework
+- **httpx**: 0.28.1 - HTTP client for testing
+
+### Frontend Dependencies
+- **React**: 19.2.0 - UI library
+- **Vite**: 7.1.11 - Build tool and dev server
+- **vis-network**: 10.0.2 - Network visualization library
+- **vitest**: 3.2.4 - Testing framework
+- **TypeScript**: Latest - Type safety and development experience
 
 ## Development
 
