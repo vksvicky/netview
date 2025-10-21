@@ -60,13 +60,22 @@ A web-based local network monitoring tool that discovers network devices via SNM
 
 3. **Start Prometheus monitoring (Optional - Terminal 3):**
    ```bash
-   docker-compose up -d
-   ./setup-grafana.sh
-   ./import-dashboard.sh
+   docker-compose -f config/docker-compose.yml up -d
+   ./scripts/setup-grafana.sh
+   ./scripts/import-dashboard.sh
    ```
    - Prometheus UI: http://localhost:9090
    - Grafana UI: http://localhost:3000 (admin/admin)
    - NetView Dashboard: http://localhost:3000/d/netview-network-monitoring
+
+### Monitoring Tools
+
+**Quick diagnostics:**
+```bash
+./scripts/troubleshoot-monitoring.sh  # Complete service diagnostics
+./scripts/open-monitoring.sh         # Open all monitoring URLs
+open scripts/monitoring-test.html    # Browser-based connectivity test
+```
 
 ### Testing
 
@@ -165,6 +174,17 @@ netview/
 │   │   ├── api.ts           # API client
 │   │   └── App.test.tsx     # UI tests
 │   └── package.json
+├── config/                  # Configuration files
+│   ├── docker-compose.yml   # Prometheus & Grafana setup
+│   ├── prometheus.yml       # Prometheus configuration
+│   └── netview-dashboard.json # Grafana dashboard
+├── scripts/                 # Utility scripts
+│   ├── setup-grafana.sh    # Grafana data source setup
+│   ├── import-dashboard.sh # Dashboard import
+│   ├── open-monitoring.sh  # Open monitoring URLs
+│   ├── troubleshoot-monitoring.sh # Diagnostics
+│   ├── monitoring-test.html # Browser connectivity test
+│   └── test-cors.html      # CORS testing
 └── Makefile                 # Development commands
 ```
 
@@ -221,12 +241,20 @@ netview_device_cpu_utilization_percent{device_id="switch1"}
 
 1. **Start Prometheus and Grafana:**
    ```bash
-   docker-compose up -d
+   docker-compose -f config/docker-compose.yml up -d
+   ./scripts/setup-grafana.sh
+   ./scripts/import-dashboard.sh
    ```
 
 2. **Access the services:**
    - Prometheus UI: http://localhost:9090
    - Grafana UI: http://localhost:3000 (admin/admin)
+   - NetView Dashboard: http://localhost:3000/d/netview-network-monitoring
+
+3. **Query NetView metrics in Prometheus:**
+   - `netview_http_requests_total` - Total HTTP requests
+   - `rate(netview_http_requests_total[5m])` - Request rate
+   - `netview_discovered_devices_total` - Discovered devices count
 
 **Option 2: Manual Prometheus Installation**
 
@@ -282,6 +310,17 @@ scrape_configs:
 - Check browser console for errors
 - Verify API connectivity: `curl http://localhost:8000/topology`
 - Ensure vis-network is properly mocked in tests
+
+**Prometheus UI shows blank screen:**
+- Run queries in the UI: `netview_http_requests_total`
+- Check if metrics are available: `curl http://localhost:8000/metrics`
+- Verify Prometheus is scraping: `curl http://localhost:9090/api/v1/targets`
+- Use troubleshooting script: `./scripts/troubleshoot-monitoring.sh`
+
+**Grafana shows no data:**
+- Verify Prometheus data source is configured
+- Check data source URL: `http://host.docker.internal:9090`
+- Re-run setup: `./scripts/setup-grafana.sh`
 
 ## License
 

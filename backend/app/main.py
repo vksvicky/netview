@@ -22,15 +22,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NetView", version="0.1.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
 """Metrics are centrally declared in app.metrics"""
 
 
@@ -44,6 +35,15 @@ async def metrics_middleware(request, call_next):
     except Exception:
         pass
     return response
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/metrics")
