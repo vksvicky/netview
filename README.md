@@ -61,9 +61,12 @@ A web-based local network monitoring tool that discovers network devices via SNM
 3. **Start Prometheus monitoring (Optional - Terminal 3):**
    ```bash
    docker-compose up -d
+   ./setup-grafana.sh
+   ./import-dashboard.sh
    ```
    - Prometheus UI: http://localhost:9090
    - Grafana UI: http://localhost:3000 (admin/admin)
+   - NetView Dashboard: http://localhost:3000/d/netview-network-monitoring
 
 ### Testing
 
