@@ -25,11 +25,16 @@ def given_empty_db(db: Session):
 
 
 @when("discovery runs with mocked SNMP responses")
-@pytest.mark.asyncio
-async def when_discovery_runs(mocker, db: Session):
+def when_discovery_runs(mocker, db: Session):
+    import asyncio
+    from app.services.fast_discovery import FastDiscoveryService
+    
     mock_snmp = SnmpClient(config={})
+    mock_fast_discovery = FastDiscoveryService(config={})
+    
+    # Mock the fast discovery to return test devices
     mocker.patch.object(
-        mock_snmp,
+        mock_fast_discovery,
         "discover_devices",
         return_value=[
             {
@@ -43,8 +48,9 @@ async def when_discovery_runs(mocker, db: Session):
             }
         ],
     )
-    svc = DiscoveryService(mock_snmp)
-    await svc.run_discovery(db)
+    
+    svc = DiscoveryService(mock_snmp, mock_fast_discovery)
+    asyncio.run(svc.run_discovery(db))
 
 
 @then("the devices endpoint returns discovered devices")

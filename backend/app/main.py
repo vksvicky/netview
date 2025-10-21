@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -9,7 +10,17 @@ from .metrics import registry, http_requests_total
 from .db import initialize_database
 
 
-app = FastAPI(title="NetView", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    initialize_database()
+    start_scheduler()
+    yield
+    # Shutdown
+    pass
+
+
+app = FastAPI(title="NetView", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,11 +57,5 @@ app.include_router(interfaces.router, prefix="/interfaces", tags=["interfaces"])
 app.include_router(topology.router, prefix="/topology", tags=["topology"])
 app.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
 app.include_router(metrics_api.router, prefix="/metrics", tags=["metrics-json"])
-
-
-@app.on_event("startup")
-async def on_startup():
-    initialize_database()
-    start_scheduler()
 
 
