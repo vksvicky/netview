@@ -58,6 +58,13 @@ A web-based local network monitoring tool that discovers network devices via SNM
    ```
    - UI available at: http://localhost:5170
 
+3. **Start Prometheus monitoring (Optional - Terminal 3):**
+   ```bash
+   docker-compose up -d
+   ```
+   - Prometheus UI: http://localhost:9090
+   - Grafana UI: http://localhost:3000 (admin/admin)
+
 ### Testing
 
 **Backend tests:**
@@ -204,6 +211,43 @@ netview_if_in_errors{device_id="switch1", if_index="1"}
 netview_discovered_devices_total
 netview_device_cpu_utilization_percent{device_id="switch1"}
 ```
+
+### Prometheus Server Setup
+
+**Option 1: Using Docker Compose (Recommended)**
+
+1. **Start Prometheus and Grafana:**
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Access the services:**
+   - Prometheus UI: http://localhost:9090
+   - Grafana UI: http://localhost:3000 (admin/admin)
+
+**Option 2: Manual Prometheus Installation**
+
+1. **Download and run Prometheus:**
+   ```bash
+   # Download Prometheus
+   wget https://github.com/prometheus/prometheus/releases/download/v2.45.0/prometheus-2.45.0.linux-amd64.tar.gz
+   tar xvfz prometheus-*.tar.gz
+   cd prometheus-*
+   
+   # Start Prometheus
+   ./prometheus --config.file=prometheus.yml
+   ```
+
+2. **Configure prometheus.yml:**
+   ```yaml
+   global:
+     scrape_interval: 15s
+   
+   scrape_configs:
+     - job_name: 'netview'
+       static_configs:
+         - targets: ['localhost:8000']
+   ```
 
 ### VictoriaMetrics
 
