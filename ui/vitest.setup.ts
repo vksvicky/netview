@@ -1,4 +1,5 @@
-import '@testing-library/jest-dom'
+import '@testing-library/jest-dom/vitest'
+import { vi } from 'vitest'
 
 vi.mock('vis-network/standalone', () => {
   class MockNetwork {
@@ -8,6 +9,7 @@ vi.mock('vis-network/standalone', () => {
     selectNodes() {}
     on() {}
     setData() {}
+    fit() {}
     body = { data: { nodes: { get: () => [] } } }
   }
   const DataSet = class {}
