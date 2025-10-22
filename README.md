@@ -59,11 +59,18 @@ A web-based local network monitoring tool that discovers network devices via SNM
    - UI available at: http://localhost:5170
 
 3. **Start Prometheus monitoring (Optional - Terminal 3):**
+
+   **Option A: Using Docker**
    ```bash
-   docker-compose -f config/docker-compose.yml up -d
-   ./scripts/setup-grafana.sh
-   ./scripts/import-dashboard.sh
+   ./scripts/start-monitoring-docker.sh
    ```
+
+   **Option B: Using Podman**
+   ```bash
+   ./scripts/setup-podman.sh
+   ./scripts/start-monitoring-podman.sh
+   ```
+
    - Prometheus UI: http://localhost:9090
    - Grafana UI: http://localhost:3000 (admin/admin)
    - NetView Dashboard: http://localhost:3000/d/netview-network-monitoring
@@ -72,7 +79,13 @@ A web-based local network monitoring tool that discovers network devices via SNM
 
 **Quick diagnostics:**
 ```bash
+# For Docker
 ./scripts/troubleshoot-monitoring.sh  # Complete service diagnostics
+
+# For Podman  
+./scripts/troubleshoot-monitoring-podman.sh  # Podman-specific diagnostics
+
+# General tools
 ./scripts/open-monitoring.sh         # Open all monitoring URLs
 open scripts/monitoring-test.html    # Browser-based connectivity test
 ```
@@ -175,14 +188,19 @@ netview/
 │   │   └── App.test.tsx     # UI tests
 │   └── package.json
 ├── config/                  # Configuration files
-│   ├── docker-compose.yml   # Prometheus & Grafana setup
+│   ├── docker-compose.yml   # Docker Compose setup
+│   ├── podman-compose.yml   # Podman Compose setup
 │   ├── prometheus.yml       # Prometheus configuration
 │   └── netview-dashboard.json # Grafana dashboard
 ├── scripts/                 # Utility scripts
 │   ├── setup-grafana.sh    # Grafana data source setup
 │   ├── import-dashboard.sh # Dashboard import
 │   ├── open-monitoring.sh  # Open monitoring URLs
-│   ├── troubleshoot-monitoring.sh # Diagnostics
+│   ├── start-monitoring-docker.sh # Start monitoring with Docker
+│   ├── start-monitoring-podman.sh # Start monitoring with Podman
+│   ├── setup-podman.sh     # Podman setup script
+│   ├── troubleshoot-monitoring.sh # Docker diagnostics
+│   ├── troubleshoot-monitoring-podman.sh # Podman diagnostics
 │   ├── monitoring-test.html # Browser connectivity test
 │   └── test-cors.html      # CORS testing
 └── Makefile                 # Development commands
@@ -237,26 +255,36 @@ netview_device_cpu_utilization_percent{device_id="switch1"}
 
 ### Prometheus Server Setup
 
-**Option 1: Using Docker Compose (Recommended)**
+**Option 1: Using Docker Compose**
 
 1. **Start Prometheus and Grafana:**
    ```bash
-   docker-compose -f config/docker-compose.yml up -d
-   ./scripts/setup-grafana.sh
-   ./scripts/import-dashboard.sh
+   ./scripts/start-monitoring-docker.sh
    ```
 
-2. **Access the services:**
+**Option 2: Using Podman Compose**
+
+1. **Setup Podman (first time only):**
+   ```bash
+   ./scripts/setup-podman.sh
+   ```
+
+2. **Start Prometheus and Grafana:**
+   ```bash
+   ./scripts/start-monitoring-podman.sh
+   ```
+
+3. **Access the services:**
    - Prometheus UI: http://localhost:9090
    - Grafana UI: http://localhost:3000 (admin/admin)
    - NetView Dashboard: http://localhost:3000/d/netview-network-monitoring
 
-3. **Query NetView metrics in Prometheus:**
+4. **Query NetView metrics in Prometheus:**
    - `netview_http_requests_total` - Total HTTP requests
    - `rate(netview_http_requests_total[5m])` - Request rate
    - `netview_discovered_devices_total` - Discovered devices count
 
-**Option 2: Manual Prometheus Installation**
+**Option 3: Manual Prometheus Installation**
 
 1. **Download and run Prometheus:**
    ```bash
