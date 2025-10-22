@@ -6,90 +6,51 @@ import os
 from typing import Any, Dict, List, Optional
 import platform
 import asyncio
+import concurrent.futures
+import threading
+import requests
+import time
+from .oui_database import oui_db
+from .user_settings import user_settings_service
+from .router_discovery import RouterDiscoveryService
+from .device_cache import device_cache
+from sqlalchemy.orm import Session
 
 
 class FastDiscoveryService:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.oui_database = self._load_oui_database()
         self.network_status = {"connected": True, "last_check": None, "error": None}
         
-    def _load_oui_database(self) -> Dict[str, str]:
-        """Load OUI database from local file"""
-        try:
-            oui_file = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'data', 'oui_database.json')
-            if os.path.exists(oui_file):
-                with open(oui_file, 'r') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Failed to load OUI database: {e}")
-        
-        # Fallback minimal database
-        return {
-            "00:50:56": "VMware",
-            "08:00:27": "VirtualBox", 
-            "52:54:00": "QEMU",
-            "00:0c:29": "VMware",
-            "00:1c:42": "Parallels",
-            "00:15:5d": "Microsoft",
-            "00:16:3e": "Xen",
-            "00:1b:21": "Intel",
-            "00:1f:5b": "Apple",
-            "00:23:12": "Apple",
-            "00:25:00": "Apple",
-            "00:26:bb": "Apple",
-            "00:26:4a": "Apple",
-            "00:26:b0": "Apple",
-            "00:26:08": "Apple",
-            "00:25:4b": "Apple",
-            "00:25:bc": "Apple",
-            "00:24:36": "Apple",
-            "00:23:df": "Apple",
-            "00:23:6c": "Apple",
-            "00:22:41": "Apple",
-            "00:21:e9": "Apple",
-            "00:21:4a": "Apple",
-            "00:20:af": "Apple",
-            "00:1f:f3": "Apple",
-            "00:1e:52": "Apple",
-            "00:1d:4f": "Apple",
-            "00:1b:63": "Apple",
-            "00:1a:70": "Apple",
-            "00:19:e3": "Apple",
-            "00:18:65": "Apple",
-            "00:17:f2": "Apple",
-            "00:16:cb": "Apple",
-            "00:15:99": "Apple",
-            "00:14:51": "Apple",
-            "00:13:83": "Apple",
-            "00:12:fb": "Apple",
-            "00:11:24": "Apple",
-            "00:0f:b5": "Apple",
-            "00:0e:35": "Apple",
-            "00:0d:93": "Apple",
-            "00:0c:41": "Apple",
-            "00:0b:6b": "Apple",
-            "00:0a:95": "Apple",
-            "00:09:f3": "Apple",
-            "00:08:74": "Apple",
-            "00:07:e9": "Apple",
-            "00:06:1b": "Apple",
-            "00:05:02": "Apple",
-            "00:03:93": "Apple",
-            "00:02:2d": "Apple",
-            "00:00:0a": "Apple"
-        }
-    
     def _get_vendor_from_mac(self, mac: str) -> str:
         """Get vendor name from MAC address using OUI database"""
         if not mac or len(mac) < 8:
             return "Unknown"
         
-        # Normalize MAC address format
-        mac = mac.replace('-', ':').replace('.', ':').upper()
-        oui = ':'.join(mac.split(':')[:3])
-        
-        return self.oui_database.get(oui, "Unknown")
+        # Use the centralized OUI database service
+        vendor = oui_db.lookup_vendor(mac)
+        return vendor if vendor else "Unknown"
+    
+    def _get_mac_from_arp(self, ip: str) -> str:
+        """Get MAC address for an IP from ARP table"""
+        try:
+            if platform.system() == "Darwin":  # macOS
+                result = subprocess.run(['arp', '-n', ip], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    # Parse output: "? (192.168.1.11) at 6a:6:44:26:70:e3 on en0 ifscope [ethernet]"
+                    match = re.search(r'at\s+([0-9a-fA-F:]+)', result.stdout)
+                    if match:
+                        return match.group(1)
+            elif platform.system() == "Linux":
+                result = subprocess.run(['arp', '-n', ip], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    # Parse Linux ARP output
+                    match = re.search(r'([0-9a-fA-F:]{17})', result.stdout)
+                    if match:
+                        return match.group(1)
+        except Exception as e:
+            print(f"Error getting MAC for {ip}: {e}")
+        return None
     
     def _scan_network_async(self) -> List[Dict[str, str]]:
         """Scan the network to find devices not in ARP table (threaded)"""
@@ -136,7 +97,7 @@ class FastDiscoveryService:
                                         base_ip = f"{ip_parts[0]}.{ip_parts[1]}.{ip_parts[2]}"
                                         
                                         # Use ThreadPoolExecutor for concurrent pings
-                                        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
+                                        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
                                             # Submit ping tasks
                                             future_to_ip = {
                                                 executor.submit(self._ping_host, f"{base_ip}.{i}"): f"{base_ip}.{i}"
@@ -144,13 +105,15 @@ class FastDiscoveryService:
                                             }
                                             
                                             # Collect results with timeout
-                                            for future in concurrent.futures.as_completed(future_to_ip, timeout=10):
+                                            for future in concurrent.futures.as_completed(future_to_ip, timeout=30):
                                                 ip = future_to_ip[future]
                                                 try:
                                                     if future.result():
+                                                        # Try to get MAC address from ARP table
+                                                        mac = self._get_mac_from_arp(ip)
                                                         devices.append({
                                                             'ip': ip,
-                                                            'mac': 'Unknown',  # We don't have MAC from ping
+                                                            'mac': mac if mac else 'Unknown',
                                                             'hostname': ip,
                                                             'type': 'scan'
                                                         })
@@ -289,6 +252,304 @@ class FastDiscoveryService:
         
         return device_info
 
+    def _get_device_info_hybrid(self, ip: str, mac: str) -> Dict[str, str]:
+        """Get device information using hybrid approach with multiple methods in parallel"""
+        device_info = {
+            'ip': ip,
+            'hostname': ip,
+            'vendor': 'Unknown',
+            'model': 'Unknown',
+            'type': 'unknown',
+            'status': 'up'
+        }
+        
+        # Try to get hostname via reverse DNS first (fast)
+        try:
+            hostname = socket.gethostbyaddr(ip)[0]
+            device_info['hostname'] = hostname
+        except:
+            pass
+        
+        # Use threading to try multiple discovery methods in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all discovery methods
+            future_snmp = executor.submit(self._get_device_info_snmp, ip)
+            future_http = executor.submit(self._get_device_info_http, ip)
+            future_upnp = executor.submit(self._get_device_info_upnp, ip)
+            future_services = executor.submit(self._get_device_info_services, ip)
+            
+            # Wait for the first successful result with timeout
+            futures = [future_snmp, future_http, future_upnp, future_services]
+            method_names = ['SNMP', 'HTTP', 'UPnP', 'Services']
+            
+            for future, method_name in zip(futures, method_names):
+                try:
+                    result = future.result(timeout=0.5)  # Reduced to 0.5 second timeout per method
+                    if result and result.get('model') != 'Unknown':
+                        print(f"✅ {method_name} discovery successful for {ip}: {result.get('model')}")
+                        device_info.update(result)
+                        # Cancel remaining futures
+                        for f in futures:
+                            if f != future and not f.done():
+                                f.cancel()
+                        break
+                except (concurrent.futures.TimeoutError, Exception) as e:
+                    # Don't print every failure to reduce noise
+                    continue
+        
+        # Fallback to basic device type detection
+        if device_info['model'] == 'Unknown':
+            hostname_lower = device_info['hostname'].lower()
+            if any(keyword in hostname_lower for keyword in ['router', 'gateway', 'ap', 'access-point']):
+                device_info['type'] = 'router'
+                device_info['vendor'] = 'Router'
+            elif any(keyword in hostname_lower for keyword in ['switch', 'sw']):
+                device_info['type'] = 'switch'
+                device_info['vendor'] = 'Switch'
+            elif any(keyword in hostname_lower for keyword in ['printer', 'print']):
+                device_info['type'] = 'printer'
+                device_info['vendor'] = 'Printer'
+            elif any(keyword in hostname_lower for keyword in ['nas', 'storage', 'server']):
+                device_info['type'] = 'server'
+                device_info['vendor'] = 'Server'
+            elif any(keyword in hostname_lower for keyword in ['iphone', 'ipad', 'android', 'phone']):
+                device_info['type'] = 'mobile'
+                device_info['vendor'] = 'Mobile'
+            elif any(keyword in hostname_lower for keyword in ['laptop', 'desktop', 'pc', 'mac']):
+                device_info['type'] = 'computer'
+                device_info['vendor'] = 'Computer'
+            else:
+                device_info['type'] = 'device'
+                device_info['vendor'] = 'Unknown'
+        
+        return device_info
+
+    def _get_device_info_snmp(self, ip: str) -> Optional[Dict[str, str]]:
+        """Get device info via SNMP"""
+        try:
+            # Try sysDescr first
+            result = subprocess.run(['snmpget', '-v2c', '-c', 'public', ip, '1.3.6.1.2.1.1.1.0'], 
+                                  capture_output=True, text=True, timeout=1)  # Reduced timeout
+            if result.returncode == 0:
+                sys_descr = result.stdout.strip()
+                if '=' in sys_descr:
+                    sys_descr = sys_descr.split('=', 1)[1].strip().strip('"')
+                
+                # Parse model from sysDescr
+                model = self._parse_model_from_sysdescr(sys_descr)
+                if model != 'Unknown':
+                    return {'model': model, 'type': 'router' if 'router' in sys_descr.lower() else 'device'}
+            
+            # Try sysObjectID as fallback
+            result = subprocess.run(['snmpget', '-v2c', '-c', 'public', ip, '1.3.6.1.2.1.1.2.0'], 
+                                  capture_output=True, text=True, timeout=1)  # Reduced timeout
+            if result.returncode == 0:
+                sys_oid = result.stdout.strip()
+                model = self._parse_model_from_oid(sys_oid)
+                if model != 'Unknown':
+                    return {'model': model, 'type': 'device'}
+                    
+        except Exception as e:
+            print(f"SNMP discovery error for {ip}: {e}")
+        
+        return None
+
+    def _get_device_info_http(self, ip: str) -> Optional[Dict[str, str]]:
+        """Get device info via HTTP requests"""
+        try:
+            # Try common ports and paths
+            urls_to_try = [
+                f'http://{ip}/',
+                f'http://{ip}:8080/',
+                f'https://{ip}/',
+                f'http://{ip}/status',
+                f'http://{ip}/info',
+                f'http://{ip}/device'
+            ]
+            
+            for url in urls_to_try:
+                try:
+                    response = requests.get(url, timeout=0.5, verify=False)  # Reduced timeout
+                    if response.status_code == 200:
+                        # Parse title and content for model information
+                        model = self._parse_model_from_html(response.text)
+                        if model != 'Unknown':
+                            return {'model': model, 'type': 'device'}
+                except:
+                    continue
+                    
+        except Exception as e:
+            print(f"HTTP discovery error for {ip}: {e}")
+        
+        return None
+
+    def _get_device_info_upnp(self, ip: str) -> Optional[Dict[str, str]]:
+        """Get device info via UPnP/SSDP discovery"""
+        try:
+            # Send SSDP M-SEARCH request
+            ssdp_request = (
+                "M-SEARCH * HTTP/1.1\r\n"
+                "HOST: 239.255.255.250:1900\r\n"
+                "MAN: \"ssdp:discover\"\r\n"
+                "ST: upnp:rootdevice\r\n"
+                "MX: 3\r\n\r\n"
+            )
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(2)
+            sock.sendto(ssdp_request.encode(), ('239.255.255.250', 1900))
+            
+            try:
+                data, addr = sock.recvfrom(1024)
+                if addr[0] == ip:
+                    response = data.decode()
+                    model = self._parse_model_from_upnp(response)
+                    if model != 'Unknown':
+                        return {'model': model, 'type': 'device'}
+            except socket.timeout:
+                pass
+            finally:
+                sock.close()
+                
+        except Exception as e:
+            print(f"UPnP discovery error for {ip}: {e}")
+        
+        return None
+
+    def _get_device_info_services(self, ip: str) -> Optional[Dict[str, str]]:
+        """Get device info via service banner detection"""
+        try:
+            # Common ports to check
+            ports_to_check = [22, 23, 80, 443, 8080, 8443, 161, 162]
+            
+            for port in ports_to_check:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(1)
+                    result = sock.connect_ex((ip, port))
+                    if result == 0:
+                        # Port is open, try to get banner
+                        banner = self._get_service_banner(ip, port)
+                        if banner:
+                            model = self._parse_model_from_banner(banner, port)
+                            if model != 'Unknown':
+                                sock.close()
+                                return {'model': model, 'type': 'device'}
+                    sock.close()
+                except:
+                    continue
+                    
+        except Exception as e:
+            print(f"Service discovery error for {ip}: {e}")
+        
+        return None
+
+    def _parse_model_from_sysdescr(self, sys_descr: str) -> str:
+        """Parse model from SNMP sysDescr"""
+        if not sys_descr:
+            return 'Unknown'
+        
+        # Common patterns in sysDescr
+        patterns = [
+            r'(\w+)\s+Router',  # "Orbi Router"
+            r'(\w+)\s+Switch',  # "Cisco Switch"
+            r'(\w+)\s+AP',      # "Unifi AP"
+            r'Model:\s*(\w+)',  # "Model: B0210"
+            r'(\w+)\s+\d+',     # "Netgear R7000"
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, sys_descr, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        
+        return 'Unknown'
+
+    def _parse_model_from_oid(self, sys_oid: str) -> str:
+        """Parse model from SNMP sysObjectID"""
+        # This would need a comprehensive OID to model mapping
+        # For now, return Unknown
+        return 'Unknown'
+
+    def _parse_model_from_html(self, html_content: str) -> str:
+        """Parse model from HTML content"""
+        if not html_content:
+            return 'Unknown'
+        
+        # Look for title tags
+        title_match = re.search(r'<title[^>]*>([^<]+)</title>', html_content, re.IGNORECASE)
+        if title_match:
+            title = title_match.group(1)
+            # Extract model from title
+            model_match = re.search(r'(\w+)\s+(Router|Switch|AP|Device)', title, re.IGNORECASE)
+            if model_match:
+                return model_match.group(1)
+        
+        # Look for model in meta tags or content
+        model_patterns = [
+            r'Model[:\s]+(\w+)',
+            r'Device[:\s]+(\w+)',
+            r'Product[:\s]+(\w+)'
+        ]
+        
+        for pattern in model_patterns:
+            match = re.search(pattern, html_content, re.IGNORECASE)
+            if match:
+                return match.group(1)
+        
+        return 'Unknown'
+
+    def _parse_model_from_upnp(self, upnp_response: str) -> str:
+        """Parse model from UPnP response"""
+        if not upnp_response:
+            return 'Unknown'
+        
+        # Look for model in UPnP headers
+        model_match = re.search(r'MODEL[:\s]+([^\r\n]+)', upnp_response, re.IGNORECASE)
+        if model_match:
+            return model_match.group(1).strip()
+        
+        return 'Unknown'
+
+    def _get_service_banner(self, ip: str, port: int) -> Optional[str]:
+        """Get service banner from open port"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            sock.connect((ip, port))
+            
+            # Try to receive some data
+            sock.settimeout(0.5)
+            try:
+                banner = sock.recv(1024).decode('utf-8', errors='ignore')
+                return banner
+            except:
+                return None
+            finally:
+                sock.close()
+        except:
+            return None
+
+    def _parse_model_from_banner(self, banner: str, port: int) -> str:
+        """Parse model from service banner"""
+        if not banner:
+            return 'Unknown'
+        
+        # SSH banners often contain device info
+        if port == 22:
+            if 'OpenSSH' in banner:
+                return 'Linux Device'
+            elif 'Cisco' in banner:
+                return 'Cisco Device'
+        
+        # HTTP banners
+        if port in [80, 443, 8080, 8443]:
+            server_match = re.search(r'Server[:\s]+([^\r\n]+)', banner, re.IGNORECASE)
+            if server_match:
+                return server_match.group(1).strip()
+        
+        return 'Unknown'
+
     def _check_network_connectivity(self) -> Dict[str, Any]:
         """Check if the network is connected by testing multiple methods"""
         import time
@@ -407,11 +668,179 @@ class FastDiscoveryService:
         """Get current network status"""
         return self.network_status
 
-    async def discover_devices(self) -> List[Dict[str, Any]]:
-        """Fast device discovery using ARP table only"""
+    async def discover_devices(self, db: Session = None, force_refresh: bool = False) -> List[Dict[str, Any]]:
+        """Fast device discovery with caching (like Orbi interface)"""
+        
+        # Check cache first (unless force refresh)
+        if not force_refresh:
+            cached_devices = device_cache.get_cached_devices()
+            if cached_devices:
+                print(f"✅ Using cached devices: {len(cached_devices)} devices")
+                return cached_devices
+        
+        print("Starting fresh device discovery...")
         all_devices = []
         
-        print("Starting fast device discovery (ARP table only)...")
+        # Use simple ARP table discovery (fastest approach like Orbi interface)
+        print("Using simple ARP table discovery for speed...")
+        all_devices = self._get_simple_arp_devices(db)
+        
+        # Update cache with new devices
+        if all_devices:
+            device_cache.update_cache(all_devices)
+            print(f"✅ Updated device cache with {len(all_devices)} devices")
+        
+        return all_devices
+    
+    def _get_simple_arp_devices(self, db: Session = None) -> List[Dict[str, Any]]:
+        """Simple ARP table discovery - fast like Orbi interface"""
+        devices = []
+        
+        try:
+            # Get ARP table (fastest method)
+            arp_devices = self._get_arp_table()
+            
+            # Process devices quickly
+            for device in arp_devices:
+                vendor = self._get_vendor_from_mac(device['mac'])
+                
+                # Get device name (hostname or generate from vendor)
+                device_name = self._get_device_name(device['hostname'], vendor, device['ip'])
+                
+                # Determine connection type and IP version
+                connection_type = self._get_connection_type(device['mac'], vendor)
+                ip_version = self._get_ip_version(device['ip'])
+                
+                device_data = {
+                    'id': device['ip'],
+                    'hostname': device_name,  # Use device name instead of IP
+                    'mgmtIp': device['ip'],
+                    'vendor': vendor,
+                    'model': 'Unknown',  # Keep simple for speed
+                    'status': 'up',
+                    'type': 'device',
+                    'mac': device['mac'],
+                    'discovery_method': 'arp_simple',
+                    'connection_type': connection_type,
+                    'ip_version': ip_version,
+                    'device_name': device_name
+                }
+                
+                # Apply user mappings if available
+                if db:
+                    device_data = user_settings_service.apply_user_mappings_to_device(db, device_data)
+                
+                devices.append(device_data)
+            
+            print(f"✅ Simple ARP discovery found {len(devices)} devices")
+            
+        except Exception as e:
+            print(f"❌ Simple ARP discovery error: {e}")
+        
+        return devices
+    
+    def _get_device_name(self, hostname: str, vendor: str, ip: str) -> str:
+        """Generate a meaningful device name"""
+        # If we have a good hostname, use it
+        if hostname and hostname != ip and not hostname.startswith('192.168.'):
+            return hostname
+        
+        # Generate name based on vendor and IP
+        if vendor and vendor != "Unknown":
+            # Clean vendor name
+            vendor_clean = vendor.split()[0]  # Take first word
+            if vendor_clean.lower() in ['apple', 'samsung', 'google', 'microsoft']:
+                return f"{vendor_clean} Device"
+            elif vendor_clean.lower() in ['netgear', 'cisco', 'linksys']:
+                return f"{vendor_clean} Router"
+            else:
+                return f"{vendor_clean} Device"
+        
+        # Fallback to IP-based name
+        return f"Device-{ip.split('.')[-1]}"
+    
+    def _get_connection_type(self, mac: str, vendor: str) -> str:
+        """Determine connection type (wired/wireless, frequency)"""
+        if not mac or mac == "Unknown":
+            return "Unknown"
+        
+        # Check for known wireless vendors
+        wireless_vendors = [
+            'apple', 'samsung', 'google', 'microsoft', 'amazon', 'sony',
+            'lg', 'huawei', 'xiaomi', 'oneplus', 'motorola', 'nokia'
+        ]
+        
+        if vendor and any(wv in vendor.lower() for wv in wireless_vendors):
+            # Most modern devices support 5GHz, but we can't determine exact frequency from ARP
+            return "Wireless (2.4GHz/5GHz)"
+        
+        # Check for router/access point vendors
+        router_vendors = ['netgear', 'cisco', 'linksys', 'tp-link', 'd-link', 'asus']
+        if vendor and any(rv in vendor.lower() for rv in router_vendors):
+            return "Wired (Ethernet)"
+        
+        # Check for IoT/smart device vendors
+        iot_vendors = ['espressif', 'dyson', 'philips', 'nest', 'ring', 'arlo']
+        if vendor and any(iv in vendor.lower() for iv in iot_vendors):
+            return "Wireless (2.4GHz)"
+        
+        # Default assumption
+        return "Wireless (2.4GHz/5GHz)"
+    
+    def _get_ip_version(self, ip: str) -> str:
+        """Determine IP version"""
+        if not ip:
+            return "Unknown"
+        
+        # Check for IPv6
+        if ':' in ip:
+            return "IPv6"
+        
+        # Check for IPv4
+        if '.' in ip:
+            return "IPv4"
+        
+        return "Unknown"
+    
+    def _discover_via_router(self) -> List[Dict[str, Any]]:
+        """Discover devices via router's device table (like Orbi interface)"""
+        try:
+            router_service = RouterDiscoveryService()
+            devices = router_service.get_router_device_table()
+            
+            # Process devices and add vendor/model information
+            processed_devices = []
+            for device in devices:
+                # Get vendor from MAC address
+                vendor = self._get_vendor_from_mac(device['mac'])
+                
+                # Apply user mappings if database session is available
+                if hasattr(self, '_db') and self._db:
+                    device = user_settings_service.apply_user_mappings_to_device(self._db, device)
+                
+                processed_devices.append({
+                    'id': device['ip'],
+                    'hostname': device['hostname'],
+                    'mgmtIp': device['ip'],
+                    'vendor': vendor if vendor != "Unknown" else device.get('vendor', 'Unknown'),
+                    'model': device.get('model', 'Unknown'),
+                    'status': device['status'],
+                    'type': device['type'],
+                    'mac': device['mac'],
+                    'discovery_method': device.get('source', 'router')
+                })
+            
+            return processed_devices
+            
+        except Exception as e:
+            print(f"Router discovery error: {e}")
+            return []
+    
+    async def _discover_via_arp_fallback(self, db: Session = None) -> List[Dict[str, Any]]:
+        """Fallback to ARP table discovery"""
+        all_devices = []
+        
+        print("Starting ARP table fallback discovery...")
         
         # Check network connectivity first
         print("Checking network connectivity...")
@@ -451,20 +880,28 @@ class FastDiscoveryService:
         final_devices = []
         for device in all_devices:
             vendor = self._get_vendor_from_mac(device['mac'])
-            device_info = self._get_device_info(device['ip'])
+            
+            # Use hybrid approach to get detailed device information
+            device_info = self._get_device_info_hybrid(device['ip'], device['mac'])
             
             discovery_method = 'arp' if device['ip'] in arp_ips else 'scan'
             
-            final_devices.append({
+            device_data = {
                 'id': device['ip'],
-                'hostname': device['hostname'],
+                'hostname': device_info['hostname'],
                 'mgmtIp': device['ip'],
                 'vendor': vendor if vendor != "Unknown" else device_info['vendor'],
                 'model': device_info['model'],
-                'status': 'up',
+                'status': device_info['status'],
                 'type': device_info['type'],
                 'mac': device['mac'],
                 'discovery_method': discovery_method
-            })
+            }
+            
+            # Apply user-defined mappings if database session is available
+            if db:
+                device_data = user_settings_service.apply_user_mappings_to_device(db, device_data)
+            
+            final_devices.append(device_data)
         
         return final_devices

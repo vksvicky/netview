@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus } from './api'
+import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings } from './api'
 
 console.log('App component loading...')
 
@@ -73,6 +73,9 @@ export const App: React.FC = () => {
         setConnectionStatus('connected')
         setDebugInfo(`Loaded ${data.nodes.length} nodes, ${data.edges.length} edges`)
         
+        // Also load debug data initially
+        await loadDebugData()
+        
         if (!network) return
         
         const { DataSet } = await import('vis-network/standalone')
@@ -132,7 +135,13 @@ export const App: React.FC = () => {
   const [sidebar, setSidebar] = useState<any>({ device: null, interfaces: [], selectedIf: null, metrics: null })
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting')
   const [networkStatus, setNetworkStatus] = useState<any>({ connected: true, error: null })
+  const [debugData, setDebugData] = useState<any>({ unknown_devices: [], count: 0, total_devices: 0 })
+  const [debugDataLoaded, setDebugDataLoaded] = useState(false)
+  const [activeTab, setActiveTab] = useState<'devices' | 'debug'>('devices')
   const [showNetworkAlert, setShowNetworkAlert] = useState(false)
+  const [showIdentifyModal, setShowIdentifyModal] = useState(false)
+  const [selectedDevice, setSelectedDevice] = useState<any>(null)
+  const [identifyForm, setIdentifyForm] = useState({ vendor: '', model: '', hostname: '', notes: '' })
 
   const onSearch = () => {
     if (!network) return
@@ -148,6 +157,18 @@ export const App: React.FC = () => {
     if (!sidebar.device) return
     const m = await fetchInterfaceMetrics(sidebar.device.id || sidebar.device.deviceId || sidebar.device.hostname, ifc.ifIndex)
     setSidebar((s: any) => ({ ...s, selectedIf: ifc, metrics: m.lastCounters || {} }))
+  }
+
+  const loadDebugData = async () => {
+    try {
+      const data = await getUnknownVendors()
+      if (data.status === 'success') {
+        setDebugData(data.data)
+        setDebugDataLoaded(true)
+      }
+    } catch (error) {
+      console.error('Failed to load debug data:', error)
+    }
   }
 
   const checkNetworkStatus = async () => {
@@ -177,6 +198,58 @@ export const App: React.FC = () => {
       console.error('Failed to check network status:', error)
       setNetworkStatus({ connected: false, error: 'Unable to check network status' })
       setShowNetworkAlert(true)
+    }
+  }
+
+  const openIdentifyModal = (device: any) => {
+    setSelectedDevice(device)
+    setIdentifyForm({
+      vendor: device.vendor || '',
+      model: device.model || '',
+      hostname: device.hostname || '',
+      notes: ''
+    })
+    setShowIdentifyModal(true)
+  }
+
+  const closeIdentifyModal = () => {
+    setShowIdentifyModal(false)
+    setSelectedDevice(null)
+    setIdentifyForm({ vendor: '', model: '', hostname: '', notes: '' })
+  }
+
+  const handleIdentifyDevice = async () => {
+    if (!selectedDevice || !identifyForm.vendor || !identifyForm.model) {
+      alert('Please fill in vendor and model')
+      return
+    }
+
+    try {
+      // Create user mapping
+      await createUserMapping({
+        identifier: selectedDevice.mac_address || selectedDevice.mgmtIp,
+        device_type: selectedDevice.mac_address ? 'mac_mapping' : 'ip_mapping',
+        vendor: identifyForm.vendor,
+        model: identifyForm.model,
+        hostname: identifyForm.hostname,
+        notes: identifyForm.notes
+      })
+
+      // Apply mappings to devices
+      await applyUserMappings()
+
+      // Refresh debug data
+      await loadDebugData()
+
+      // Refresh topology
+      const data = await fetchTopology()
+      setTopologyData(data)
+
+      closeIdentifyModal()
+      alert('Device identified successfully!')
+    } catch (error) {
+      console.error('Failed to identify device:', error)
+      alert('Failed to identify device. Please try again.')
     }
   }
 
@@ -309,9 +382,9 @@ export const App: React.FC = () => {
               >
                 <div style={{ fontSize: '24px' }}>🌐</div>
                 <div>
-                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{topologyData.nodes[0].label}</div>
+                  <div style={{ fontWeight: 'bold', fontSize: '16px' }}>{topologyData.nodes[0].device_name || topologyData.nodes[0].label}</div>
                   <div style={{ fontSize: '12px', color: '#666' }}>
-                    IP: {topologyData.nodes[0].title} | Vendor: {topologyData.nodes[0].group}
+                    IP: {topologyData.nodes[0].title} | Vendor: {topologyData.nodes[0].group} | {topologyData.nodes[0].connection_type || 'Unknown'}
                   </div>
                 </div>
               </div>
@@ -333,47 +406,173 @@ export const App: React.FC = () => {
               zIndex: 1001,
               overflow: 'auto'
             }}>
-              <h3 style={{ marginTop: 0, marginBottom: 16 }}>Network Devices ({topologyData.nodes.length - 1})</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
-                {topologyData.nodes.slice(1).map((node: any, index: number) => (
-                  <div 
-                    key={node.id}
-                    style={{ 
-                      padding: '12px', 
-                      border: '1px solid #ccc', 
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      background: '#fff',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                      transition: 'box-shadow 0.2s'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)'}
-                    onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'}
-                    onClick={() => {
-                      setSidebar({ 
-                        device: { 
-                          id: node.id, 
-                          hostname: node.label, 
-                          mgmtIp: node.title, 
-                          vendor: node.group 
-                        }, 
-                        interfaces: [
-                          { id: `${node.id}:1`, ifIndex: 1, name: 'Gi0/1', adminStatus: 'up', operStatus: 'up' },
-                          { id: `${node.id}:2`, ifIndex: 2, name: 'Gi0/2', adminStatus: 'up', operStatus: 'up' }
-                        ],
-                        selectedIf: null, 
-                        metrics: null 
-                      })
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{node.label}</div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      <div>IP: {node.title}</div>
-                      <div>Vendor: {node.group}</div>
-                    </div>
-                  </div>
-                ))}
+              {/* Tabs */}
+              <div style={{ display: 'flex', marginBottom: 16, borderBottom: '1px solid #ddd' }}>
+                <button
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: activeTab === 'devices' ? '#007bff' : 'transparent',
+                    color: activeTab === 'devices' ? 'white' : '#666',
+                    cursor: 'pointer',
+                    borderRadius: '4px 4px 0 0',
+                    marginRight: '4px'
+                  }}
+                  onClick={() => setActiveTab('devices')}
+                >
+                  Devices ({topologyData.nodes.length - 1})
+                </button>
+                <button
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: activeTab === 'debug' ? '#dc3545' : 'transparent',
+                    color: activeTab === 'debug' ? 'white' : '#666',
+                    cursor: 'pointer',
+                    borderRadius: '4px 4px 0 0'
+                  }}
+                  onClick={() => {
+                    setActiveTab('debug')
+                    if (!debugDataLoaded) {
+                      loadDebugData()
+                    }
+                  }}
+                >
+                  Debug Unknown {debugDataLoaded ? `(${debugData.count})` : '(?)'}
+                </button>
               </div>
+
+              {/* Devices Tab */}
+              {activeTab === 'devices' && (
+                <div>
+                  <h3 style={{ marginTop: 0, marginBottom: 16 }}>Network Devices ({topologyData.nodes.length - 1})</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
+                    {topologyData.nodes.slice(1).map((node: any, index: number) => (
+                      <div 
+                        key={node.id}
+                        style={{ 
+                          padding: '12px', 
+                          border: '1px solid #ccc', 
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          background: '#fff',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          transition: 'box-shadow 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)'}
+                        onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'}
+                        onClick={() => {
+                          setSidebar({ 
+                            device: { 
+                              id: node.id, 
+                              hostname: node.label, 
+                              mgmtIp: node.title, 
+                              vendor: node.group 
+                            }, 
+                            interfaces: [
+                              { id: `${node.id}:1`, ifIndex: 1, name: 'Gi0/1', adminStatus: 'up', operStatus: 'up' },
+                              { id: `${node.id}:2`, ifIndex: 2, name: 'Gi0/2', adminStatus: 'up', operStatus: 'up' }
+                            ],
+                            selectedIf: null, 
+                            metrics: null 
+                          })
+                        }}
+                      >
+                        <div style={{ fontWeight: 'bold', marginBottom: '8px' }}>{node.device_name || node.label}</div>
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          <div><strong>IP:</strong> {node.title}</div>
+                          <div><strong>MAC:</strong> {node.mac || 'Unknown'}</div>
+                          <div><strong>Model:</strong> {node.model || 'Unknown'}</div>
+                          <div><strong>Vendor:</strong> {node.group}</div>
+                          <div><strong>Connection:</strong> {node.connection_type || 'Unknown'}</div>
+                          <div><strong>IP Version:</strong> {node.ip_version || 'IPv4'}</div>
+                          <div><strong>Status:</strong> {node.status || 'up'}</div>
+                          {node.lastSeen && (
+                            <div><strong>Last Seen:</strong> {new Date(node.lastSeen).toLocaleString()}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Debug Tab */}
+              {activeTab === 'debug' && (
+                <div>
+                  <h3 style={{ marginTop: 0, marginBottom: 16 }}>
+                    Unknown Vendors {debugDataLoaded ? `(${debugData.count})` : '(Loading...)'}
+                  </h3>
+                  <div style={{ marginBottom: 16 }}>
+                    <button
+                      style={{
+                        padding: '8px 16px',
+                        background: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                      onClick={loadDebugData}
+                    >
+                      Refresh Debug Data
+                    </button>
+                  </div>
+                  {!debugDataLoaded ? (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                      <div>Loading debug data...</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
+                      {debugData.unknown_devices.map((device: any, index: number) => (
+                      <div 
+                        key={device.id}
+                        style={{ 
+                          padding: '12px', 
+                          border: '1px solid #dc3545', 
+                          borderRadius: '6px',
+                          background: '#fff5f5',
+                          boxShadow: '0 2px 4px rgba(220,53,69,0.1)'
+                        }}
+                      >
+                        <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#dc3545' }}>
+                          {device.hostname || device.mgmtIp}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                          <div><strong>IP:</strong> {device.mgmtIp}</div>
+                          <div><strong>MAC:</strong> {device.mac_address || 'Unknown'}</div>
+                          <div><strong>Model:</strong> {device.model || 'Unknown'}</div>
+                          <div><strong>Status:</strong> {device.status}</div>
+                          {device.lastSeen && (
+                            <div><strong>Last Seen:</strong> {new Date(device.lastSeen).toLocaleString()}</div>
+                          )}
+                        </div>
+                        <button
+                          style={{
+                            padding: '4px 8px',
+                            background: '#007bff',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '11px'
+                          }}
+                          onClick={() => openIdentifyModal(device)}
+                        >
+                          Identify Device
+                        </button>
+                      </div>
+                      ))}
+                      {debugData.count === 0 && (
+                        <div style={{ textAlign: 'center', padding: '40px', color: '#28a745' }}>
+                          <div style={{ fontSize: '24px', marginBottom: '8px' }}>🎉</div>
+                          <div>No unknown vendors found! All devices have been identified.</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           
@@ -396,9 +595,17 @@ export const App: React.FC = () => {
         <div style={{ width: 320, borderLeft: '1px solid #ddd', padding: 8 }}>
           {sidebar.device ? (
             <div>
-              <h3 style={{ marginTop: 0 }}>{sidebar.device.hostname || sidebar.device.id}</h3>
-              <div>IP: {sidebar.device.mgmtIp}</div>
-              <div>Vendor: {sidebar.device.vendor}</div>
+              <h3 style={{ marginTop: 0 }}>{sidebar.device.device_name || sidebar.device.hostname || sidebar.device.id}</h3>
+              <div><strong>IP:</strong> {sidebar.device.mgmtIp}</div>
+              <div><strong>MAC:</strong> {sidebar.device.mac || 'Unknown'}</div>
+              <div><strong>Vendor:</strong> {sidebar.device.vendor}</div>
+              <div><strong>Model:</strong> {sidebar.device.model || 'Unknown'}</div>
+              <div><strong>Connection Type:</strong> {sidebar.device.connection_type || 'Unknown'}</div>
+              <div><strong>IP Version:</strong> {sidebar.device.ip_version || 'IPv4'}</div>
+              <div><strong>Status:</strong> {sidebar.device.status || 'up'}</div>
+              {sidebar.device.lastSeen && (
+                <div><strong>Last Seen:</strong> {new Date(sidebar.device.lastSeen).toLocaleString()}</div>
+              )}
               <h4>Interfaces</h4>
               <ul style={{ listStyle: 'none', padding: 0 }}>
                 {sidebar.interfaces.map((i: any) => (
@@ -422,6 +629,108 @@ export const App: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Device Identification Modal */}
+      {showIdentifyModal && selectedDevice && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '24px',
+            borderRadius: '8px',
+            width: '400px',
+            maxWidth: '90vw'
+          }}>
+            <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Identify Device</h3>
+            <div style={{ marginBottom: '16px' }}>
+              <div><strong>IP:</strong> {selectedDevice.mgmtIp}</div>
+              <div><strong>MAC:</strong> {selectedDevice.mac_address || 'Unknown'}</div>
+            </div>
+            
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Vendor:</label>
+              <input
+                type="text"
+                value={identifyForm.vendor}
+                onChange={(e) => setIdentifyForm({...identifyForm, vendor: e.target.value})}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="e.g., Apple, Samsung, Netgear"
+              />
+            </div>
+            
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Model:</label>
+              <input
+                type="text"
+                value={identifyForm.model}
+                onChange={(e) => setIdentifyForm({...identifyForm, model: e.target.value})}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="e.g., iPhone 14, Galaxy S23, Orbi Router"
+              />
+            </div>
+            
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Hostname (optional):</label>
+              <input
+                type="text"
+                value={identifyForm.hostname}
+                onChange={(e) => setIdentifyForm({...identifyForm, hostname: e.target.value})}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                placeholder="e.g., My-iPhone, Living-Room-TV"
+              />
+            </div>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '4px', fontWeight: 'bold' }}>Notes (optional):</label>
+              <textarea
+                value={identifyForm.notes}
+                onChange={(e) => setIdentifyForm({...identifyForm, notes: e.target.value})}
+                style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', height: '60px' }}
+                placeholder="Additional notes about this device..."
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={closeIdentifyModal}
+                style={{
+                  padding: '8px 16px',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleIdentifyDevice}
+                style={{
+                  padding: '8px 16px',
+                  background: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Identify Device
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -95,4 +95,81 @@ export async function getNetworkStatus() {
   }
 }
 
+export async function getUnknownVendors() {
+  try {
+    const timestamp = Date.now()
+    const resp = await fetch(`${API_BASE}/oui/debug/unknown-vendors?t=${timestamp}`, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch unknown vendors:', error)
+    return { status: 'error', data: { unknown_devices: [], count: 0, total_devices: 0 } }
+  }
+}
+
+export async function getUserMappings() {
+  try {
+    const timestamp = Date.now()
+    const resp = await fetch(`${API_BASE}/user-settings/mappings?t=${timestamp}`, {
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch user mappings:', error)
+    return []
+  }
+}
+
+export async function createUserMapping(mapping: {
+  identifier: string
+  device_type: string
+  vendor: string
+  model: string
+  hostname?: string
+  notes?: string
+}) {
+  try {
+    const resp = await fetch(`${API_BASE}/user-settings/mappings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      body: JSON.stringify(mapping)
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to create user mapping:', error)
+    throw error
+  }
+}
+
+export async function applyUserMappings() {
+  try {
+    const resp = await fetch(`${API_BASE}/user-settings/apply-to-devices`, {
+      method: 'POST',
+      headers: {
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      }
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to apply user mappings:', error)
+    throw error
+  }
+}
+
 

@@ -25,6 +25,9 @@ class Device(Base):
     roles = Column(JSON, default=list)
     status = Column(String, default="unknown")
     last_seen = Column(DateTime, default=datetime.utcnow)
+    connection_type = Column(String, default="Unknown")
+    ip_version = Column(String, default="IPv4")
+    device_name = Column(String)
     interfaces = relationship("Interface", back_populates="device")
 
 
@@ -52,6 +55,18 @@ class Edge(Base):
     link_type = Column(String)
     vlan_tags = Column(JSON, default=list)
     confidence = Column(Integer, default=100)
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+    id = Column(String, primary_key=True)  # MAC address or IP address
+    device_type = Column(String)  # 'mac_mapping' or 'ip_mapping'
+    vendor = Column(String)
+    model = Column(String)
+    hostname = Column(String)
+    notes = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 def init_db():

@@ -5,6 +5,7 @@ from ..models import Device, Interface, Edge
 from .snmp import SnmpClient
 from .fast_discovery import FastDiscoveryService
 from .topology_builder import build_topology
+from .user_settings import user_settings_service
 
 
 class DiscoveryService:
@@ -12,9 +13,9 @@ class DiscoveryService:
         self.snmp_client = snmp_client
         self.fast_discovery = fast_discovery
 
-    async def run_discovery(self, db: Session) -> Dict[str, List[dict]]:
-        # Use fast discovery (ARP table only) for speed
-        devices: List[Dict[str, Any]] = await self.fast_discovery.discover_devices()
+    async def run_discovery(self, db: Session, force_refresh: bool = False) -> Dict[str, List[dict]]:
+        # Use fast discovery with caching for speed
+        devices: List[Dict[str, Any]] = await self.fast_discovery.discover_devices(db, force_refresh)
 
         # If no devices found, don't clear existing ones (network might be temporarily down)
         if not devices:
@@ -63,13 +64,27 @@ class DiscoveryService:
             device.vendor = d.get("vendor")
             device.model = d.get("model")
             device.status = d.get("status", "up")
+            device.connection_type = d.get("connection_type", "Unknown")
+            device.ip_version = d.get("ip_version", "IPv4")
+            device.device_name = d.get("device_name")
             db.add(device)
             device_map[device_id] = device
 
-        # Upsert interfaces if provided
+        # Upsert interfaces if provided, or create default interface with MAC
         for d in devices:
             device_id = d.get("id") or d.get("mgmtIp")
             ifaces = d.get("interfaces", [])
+            
+            # If no interfaces provided, create a default one with the MAC address
+            if not ifaces and d.get("mac"):
+                ifaces = [{
+                    "ifIndex": 1,
+                    "name": "default",
+                    "mac": d.get("mac"),
+                    "adminStatus": "up",
+                    "operStatus": "up"
+                }]
+            
             for i in ifaces:
                 iface_id = f"{device_id}:{i.get('ifIndex')}"
                 iface = db.query(Interface).filter(Interface.id == iface_id).first()

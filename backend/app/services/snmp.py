@@ -6,6 +6,7 @@ import subprocess
 import re
 from concurrent.futures import ThreadPoolExecutor
 import threading
+from .oui_database import oui_db
 
 
 class SnmpClient:
@@ -116,9 +117,21 @@ class SnmpClient:
         sys_contact = self._snmp_get(target, '1.3.6.1.2.1.1.4.0') # sysContact
         sys_location = self._snmp_get(target, '1.3.6.1.2.1.1.6.0') # sysLocation
         
-        # Extract vendor from sysDescr
+        # Try to get vendor from OUI database using MAC address
         vendor = "Unknown"
-        if sys_descr:
+        try:
+            # Get the first interface MAC address to determine vendor
+            interfaces = self._get_interfaces(target)
+            for interface in interfaces:
+                if interface.get('mac') and interface['mac'] != '00:00:00:00:00:00':
+                    vendor = oui_db.lookup_vendor(interface['mac'])
+                    if vendor:
+                        break
+        except Exception as e:
+            print(f"Error looking up vendor from OUI database: {e}")
+        
+        # Fallback to sysDescr parsing if OUI lookup failed
+        if vendor == "Unknown" and sys_descr:
             if "cisco" in sys_descr.lower():
                 vendor = "Cisco"
             elif "juniper" in sys_descr.lower():

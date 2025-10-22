@@ -123,6 +123,14 @@ Configure SNMP community strings and credentials in the discovery service:
 - Default: SNMP v2c with community "public"
 - Support for SNMP v3 with authentication and privacy
 
+### OUI Database
+
+The system uses a local OUI (Organizationally Unique Identifier) database for vendor identification:
+- **Automatic initialization**: Database is created on first run
+- **Manual update**: Use `POST /oui/update` to refresh from [IEEE standards](https://standards-oui.ieee.org)
+- **Local storage**: Database stored in `backend/resources/oui_database.json`
+- **Fast lookups**: Vendor identification from MAC addresses
+
 ## API Endpoints
 
 - `GET /topology` - Network topology graph (nodes/edges)
@@ -135,6 +143,12 @@ Configure SNMP community strings and credentials in the discovery service:
 - `GET /metrics/{device_id}/{if_index}` - Get interface metrics (JSON)
 - `GET /metrics` - Prometheus metrics endpoint
 - `GET /alerts` - List active alerts
+
+### OUI Database Management
+- `GET /oui/stats` - Get OUI database statistics
+- `POST /oui/update` - Update OUI database from IEEE standards
+- `GET /oui/lookup/{mac_address}` - Look up vendor from MAC address
+- `GET /oui/search?query={name}` - Search organizations by name
 
 ## Data Model
 

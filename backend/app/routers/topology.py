@@ -12,8 +12,8 @@ router = APIRouter()
 @router.get("")
 @router.head("")
 def get_topology(db: Session = Depends(get_db)) -> dict:
-    # Try to add missing router first
-    _add_missing_router(db)
+    # Skip router detection for now to avoid blocking UI
+    # _add_missing_router(db)
     
     devices = db.query(Device).all()
     edges = db.query(Edge).all()
@@ -23,11 +23,26 @@ def get_topology(db: Session = Depends(get_db)) -> dict:
     other_devices = []
     
     for d in devices:
+        # Get MAC address from first interface
+        mac_address = "Unknown"
+        if d.interfaces:
+            for interface in d.interfaces:
+                if interface.mac:
+                    mac_address = interface.mac
+                    break
+        
         device_info = {
             "id": d.id,
             "label": d.hostname or d.id,
             "title": d.mgmt_ip,
             "group": d.vendor or "device",
+            "mac": mac_address,
+            "model": d.model or "Unknown",
+            "status": d.status or "up",
+            "lastSeen": d.last_seen.isoformat() if d.last_seen else None,
+            "connection_type": d.connection_type or 'Unknown',
+            "ip_version": d.ip_version or 'IPv4',
+            "device_name": d.device_name or d.hostname or d.id
         }
         
         # Check if this is likely a router/gateway
@@ -162,16 +177,34 @@ def get_network_status() -> dict:
     return fast_discovery.get_network_status()
 
 @router.post("/discover")
-async def trigger_discovery(db: Session = Depends(get_db)) -> dict:
+async def trigger_discovery(db: Session = Depends(get_db), force_refresh: bool = False) -> dict:
+    import asyncio
     from ..config import settings
-    # Use only fast discovery - no SNMP to avoid blocking
-    fast_discovery = FastDiscoveryService(config=settings.snmp_config)
-    # Create a minimal discovery service that only uses fast discovery
-    from ..services.discovery import DiscoveryService
-    from ..services.snmp import SnmpClient
-    snmp_client = SnmpClient(config=settings.snmp_config)  # Still needed for interface but won't be used
-    svc = DiscoveryService(snmp_client, fast_discovery)
-    topo = await svc.run_discovery(db)
-    return topo
+    
+    # Return immediately with current topology
+    current_topology = get_topology(db)
+    
+    # Start discovery in background (non-blocking)
+    async def background_discovery():
+        try:
+            print("🚀 Starting background discovery...")
+            fast_discovery = FastDiscoveryService(config=settings.snmp_config)
+            from ..services.discovery import DiscoveryService
+            from ..services.snmp import SnmpClient
+            snmp_client = SnmpClient(config=settings.snmp_config)
+            svc = DiscoveryService(snmp_client, fast_discovery)
+            await svc.run_discovery(db, force_refresh)
+            print("✅ Background discovery completed")
+        except Exception as e:
+            print(f"❌ Background discovery failed: {e}")
+    
+    # Start background task
+    asyncio.create_task(background_discovery())
+    
+    return {
+        "status": "discovery_started",
+        "message": "Discovery started in background. UI will update automatically.",
+        "current_topology": current_topology
+    }
 
 
