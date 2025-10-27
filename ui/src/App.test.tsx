@@ -8,7 +8,13 @@ vi.mock('./api', () => ({
   fetchInterfaces: vi.fn().mockResolvedValue([{ id: 'dev1:1', ifIndex: 1, name: 'Gi0/1', adminStatus: 'up', operStatus: 'up' }]),
   fetchInterfaceMetrics: vi.fn().mockResolvedValue({ lastCounters: { inOctets: 1 } }),
   triggerDiscovery: vi.fn().mockResolvedValue({ nodes: [], edges: [] }),
-  getNetworkStatus: vi.fn().mockResolvedValue({ connected: true, error: null })
+  getNetworkStatus: vi.fn().mockResolvedValue({ connected: true, error: null }),
+  fetchDeviceHistory: vi.fn().mockResolvedValue([]),
+  fetchDeviceSessionStats: vi.fn().mockResolvedValue(null),
+  fetchRecentEvents: vi.fn().mockResolvedValue([]),
+  fetchGroupedDevices: vi.fn().mockResolvedValue({}),
+  fetchGroupingStats: vi.fn().mockResolvedValue({}),
+  getUnknownVendors: vi.fn().mockResolvedValue([])
 }))
 
 describe('App', () => {

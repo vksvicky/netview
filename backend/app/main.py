@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
-from .routers import devices, interfaces, topology, alerts, metrics as metrics_router, oui, user_settings
+from .routers import devices, interfaces, topology, alerts, metrics as metrics_router, oui, user_settings, device_history
 from .scheduler import start_scheduler
 from .metrics import registry, http_requests_total
 from .db import initialize_database
@@ -17,7 +17,6 @@ async def lifespan(app: FastAPI):
     start_scheduler()
     yield
     # Shutdown
-    pass
 
 
 app = FastAPI(title="NetView", version="0.1.0", lifespan=lifespan)
@@ -59,5 +58,6 @@ app.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
 app.include_router(metrics_router.router, prefix="/metrics", tags=["metrics-json"])
 app.include_router(oui.router, prefix="/oui", tags=["OUI Database"])
 app.include_router(user_settings.router, prefix="/user-settings", tags=["User Settings"])
+app.include_router(device_history.router, prefix="/device-history", tags=["Device History"])
 
 

@@ -172,4 +172,78 @@ export async function applyUserMappings() {
   }
 }
 
+// Device History API functions
+export async function fetchDeviceHistory(deviceId: string, limit = 50, eventType?: string, daysBack = 30) {
+  try {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      days_back: daysBack.toString()
+    })
+    if (eventType) params.append('event_type', eventType)
+    
+    const resp = await fetch(`${API_BASE}/device-history/devices/${deviceId}/history?${params}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch device history:', error)
+    return []
+  }
+}
+
+export async function fetchDeviceSessionStats(deviceId: string, daysBack = 30) {
+  try {
+    const resp = await fetch(`${API_BASE}/device-history/devices/${deviceId}/history/stats?days_back=${daysBack}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch device session stats:', error)
+    return null
+  }
+}
+
+export async function fetchRecentEvents(hoursBack = 24) {
+  try {
+    const resp = await fetch(`${API_BASE}/device-history/history/recent?hours_back=${hoursBack}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch recent events:', error)
+    return []
+  }
+}
+
+export async function fetchHistorySummary(daysBack = 7) {
+  try {
+    const resp = await fetch(`${API_BASE}/device-history/history/summary?days_back=${daysBack}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch history summary:', error)
+    return null
+  }
+}
+
+// Device Grouping API functions
+export async function fetchGroupedDevices(groupBy: string = 'vendor') {
+  try {
+    const resp = await fetch(`${API_BASE}/devices/grouped?group_by=${groupBy}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch grouped devices:', error)
+    return {}
+  }
+}
+
+export async function fetchGroupingStats() {
+  try {
+    const resp = await fetch(`${API_BASE}/devices/grouped/stats`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch grouping stats:', error)
+    return {}
+  }
+}
+
 

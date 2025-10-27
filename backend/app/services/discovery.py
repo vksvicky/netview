@@ -6,6 +6,7 @@ from .snmp import SnmpClient
 from .fast_discovery import FastDiscoveryService
 from .topology_builder import build_topology
 from .user_settings import user_settings_service
+from .device_history import device_history_service
 
 
 class DiscoveryService:
@@ -39,6 +40,18 @@ class DiscoveryService:
         current_ips = {d.get("mgmtIp") for d in devices if d.get("mgmtIp")}
         existing_devices = db.query(Device).all()
         existing_ips = {d.mgmt_ip for d in existing_devices}
+        
+        # Track device history changes before making any modifications
+        if devices:  # Only track history if we have discovered devices
+            history_events = device_history_service.process_device_discovery(
+                db=db,
+                discovered_devices=devices,
+                existing_devices=existing_devices
+            )
+            if history_events:
+                print(f"📊 Tracked {len(history_events)} device history events")
+                for event in history_events:
+                    print(f"  - {event.event_type}: {event.device_id} ({event.new_status or event.previous_status})")
         
         # Check if we're on a different network (no overlap in IPs)
         if existing_ips and not current_ips.intersection(existing_ips):

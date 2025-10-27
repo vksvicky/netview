@@ -44,6 +44,17 @@ A web-based local network monitoring tool that discovers network devices via SNM
 
 ### Running the Application
 
+**Option 1: Using Scripts (Recommended)**
+```bash
+# Build both backend and frontend
+./scripts/build-backend.sh
+./scripts/build-frontend.sh
+
+# Run full stack (both backend and frontend)
+./scripts/run-fullstack.sh
+```
+
+**Option 2: Using Make (Alternative)**
 1. **Start backend (Terminal 1):**
    ```bash
    make backend
@@ -57,6 +68,15 @@ A web-based local network monitoring tool that discovers network devices via SNM
    make ui
    ```
    - UI available at: http://localhost:5170
+
+**Option 3: Individual Services**
+```bash
+# Backend only
+./scripts/run-backend.sh
+
+# Frontend only  
+./scripts/run-frontend.sh
+```
 
 3. **Start Prometheus monitoring (Optional - Terminal 3):**
 
@@ -92,15 +112,28 @@ open scripts/monitoring-test.html    # Browser-based connectivity test
 
 ### Testing
 
-**Backend tests:**
+**Option 1: Using Scripts (Recommended)**
 ```bash
-make test
+# Run all tests with coverage
+./scripts/test-fullstack.sh
+
+# Or run individually
+./scripts/test-backend.sh    # Backend tests with coverage
+./scripts/test-frontend.sh   # Frontend tests with coverage
 ```
 
-**Frontend tests:**
+**Option 2: Using Make/npm (Alternative)**
 ```bash
+# Backend tests
+make test
+
+# Frontend tests
 cd ui && npm test
 ```
+
+**Coverage Reports:**
+- Backend: `backend/htmlcov/index.html`
+- Frontend: `ui/coverage/index.html`
 
 ## Configuration
 
@@ -207,6 +240,14 @@ netview/
 │   ├── prometheus.yml       # Prometheus configuration
 │   └── netview-dashboard.json # Grafana dashboard
 ├── scripts/                 # Utility scripts
+│   ├── build-backend.sh    # Build backend application
+│   ├── build-frontend.sh   # Build frontend application
+│   ├── run-backend.sh      # Run backend server only
+│   ├── run-frontend.sh     # Run frontend server only
+│   ├── run-fullstack.sh    # Run both backend and frontend
+│   ├── test-backend.sh     # Backend tests with coverage
+│   ├── test-frontend.sh    # Frontend tests with coverage
+│   ├── test-fullstack.sh   # All tests with coverage
 │   ├── setup-grafana.sh    # Grafana data source setup
 │   ├── import-dashboard.sh # Dashboard import
 │   ├── open-monitoring.sh  # Open monitoring URLs
@@ -216,7 +257,8 @@ netview/
 │   ├── troubleshoot-monitoring.sh # Docker diagnostics
 │   ├── troubleshoot-monitoring-podman.sh # Podman diagnostics
 │   ├── monitoring-test.html # Browser connectivity test
-│   └── test-cors.html      # CORS testing
+│   ├── test-cors.html      # CORS testing
+│   └── README.md           # Scripts documentation
 └── Makefile                 # Development commands
 ```
 

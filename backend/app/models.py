@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, create_engine
@@ -15,6 +15,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def utc_now():
+    """Return current UTC datetime"""
+    return datetime.now(UTC)
+
+
 class Device(Base):
     __tablename__ = "devices"
     id = Column(String, primary_key=True)
@@ -24,7 +29,7 @@ class Device(Base):
     model = Column(String)
     roles = Column(JSON, default=list)
     status = Column(String, default="unknown")
-    last_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=utc_now)
     connection_type = Column(String, default="Unknown")
     ip_version = Column(String, default="IPv4")
     device_name = Column(String)
@@ -65,8 +70,23 @@ class UserSettings(Base):
     model = Column(String)
     hostname = Column(String)
     notes = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class DeviceHistory(Base):
+    __tablename__ = "device_history"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_id = Column(String, ForeignKey("devices.id"), index=True)
+    event_type = Column(String, index=True)  # 'online', 'offline', 'ip_change', 'status_change'
+    previous_status = Column(String)
+    new_status = Column(String)
+    previous_ip = Column(String)
+    new_ip = Column(String)
+    event_timestamp = Column(DateTime, default=utc_now, index=True)
+    duration_seconds = Column(Integer)  # Duration of previous session (for offline events)
+    event_metadata = Column(JSON, default=dict)  # Additional event data (renamed from metadata)
+    device = relationship("Device")
 
 
 def init_db():

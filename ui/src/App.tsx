@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings } from './api'
+import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings, fetchDeviceHistory, fetchDeviceSessionStats, fetchRecentEvents, fetchGroupedDevices, fetchGroupingStats } from './api'
 
 console.log('App component loading...')
 
@@ -11,10 +11,12 @@ export const App: React.FC = () => {
   const [debugInfo, setDebugInfo] = useState('App loaded')
 
   useEffect(() => {
+    let isMounted = true
+    
     const loadVisNetwork = async () => {
       try {
         const { DataSet, Network } = await import('vis-network/standalone')
-        if (!containerRef.current) return
+        if (!containerRef.current || !isMounted) return
         
         const nodes = new DataSet([])
         const edges = new DataSet([])
@@ -28,7 +30,7 @@ export const App: React.FC = () => {
           },
           nodes: {
             shape: 'box',
-            margin: 10,
+            margin: { top: 10, right: 10, bottom: 10, left: 10 },
             font: { size: 14 },
             borderWidth: 2,
             shadow: true
@@ -36,39 +38,91 @@ export const App: React.FC = () => {
           edges: {
             width: 2,
             color: { color: '#848484' },
-            smooth: { type: 'continuous' }
+            smooth: { enabled: true, type: 'continuous', roundness: 0.5 }
           }
         })
+        
+        if (!isMounted) {
+          net.destroy()
+          return
+        }
+        
         setNetwork(net)
         
         net.on('selectNode', async (params: any) => {
+          if (!isMounted) return
+          
           const nodeId = params.nodes?.[0]
           if (!nodeId) return
           const dev = await fetchDevice(nodeId)
           const ifs = await fetchInterfaces(nodeId)
-          setSidebar({ device: dev, interfaces: ifs })
+          
+          if (isMounted) {
+            setSidebar({ device: dev, interfaces: ifs })
+            
+            // Load device history
+            setHistoryLoading(true)
+            try {
+              const [history, stats] = await Promise.all([
+                fetchDeviceHistory(nodeId),
+                fetchDeviceSessionStats(nodeId)
+              ])
+              if (isMounted) {
+                setDeviceHistory(history)
+                setDeviceSessionStats(stats)
+              }
+            } catch (error) {
+              if (isMounted) {
+                console.error('Failed to load device history:', error)
+              }
+            } finally {
+              if (isMounted) {
+                setHistoryLoading(false)
+              }
+            }
+          }
         })
         
-        return () => { net.destroy() }
+        return () => { 
+          if (isMounted) {
+            net.destroy() 
+          }
+        }
       } catch (error) {
-        console.error('Failed to load vis-network:', error)
+        if (isMounted) {
+          console.error('Failed to load vis-network:', error)
+        }
       }
     }
     
     loadVisNetwork()
+    
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   useEffect(() => {
+    let fitTimeout: number | null = null
+    let isMounted = true
+    
     const load = async () => {
       try {
+        if (!isMounted) return
+        
         setDebugInfo('Loading topology...')
         setConnectionStatus('connecting')
         
         // Check network status first
         await checkNetworkStatus()
         
+        if (!isMounted) return
+        
         const data = await fetchTopology()
         console.log('Topology data received:', data)
+        
+        if (!isMounted) return
+        
         setTopologyData(data)
         setConnectionStatus('connected')
         setDebugInfo(`Loaded ${data.nodes.length} nodes, ${data.edges.length} edges`)
@@ -76,7 +130,7 @@ export const App: React.FC = () => {
         // Also load debug data initially
         await loadDebugData()
         
-        if (!network) return
+        if (!network || !isMounted) return
         
         const { DataSet } = await import('vis-network/standalone')
         const nodes = new DataSet(data.nodes || [])
@@ -84,7 +138,7 @@ export const App: React.FC = () => {
         network.setData({ nodes, edges })
         
         // Auto-select the first device (router) if available
-        if (data.nodes && data.nodes.length > 0) {
+        if (data.nodes && data.nodes.length > 0 && isMounted) {
           const firstDevice = data.nodes[0]
           // Only auto-select if it's likely a router (ends with .1 or has router vendor)
           if (firstDevice.title.endsWith('.1') || firstDevice.group.toLowerCase().includes('router')) {
@@ -106,30 +160,32 @@ export const App: React.FC = () => {
         }
         
         // Fit the network to show all nodes
-        setTimeout(() => {
-          network.fit()
-        }, 100)
+        if (isMounted) {
+          fitTimeout = setTimeout(() => {
+            if (network && isMounted) {
+              network.fit()
+            }
+          }, 100)
+        }
       } catch (error) {
-        console.error('Failed to load topology:', error)
-        setConnectionStatus('error')
-        setDebugInfo(`Error: ${error}`)
+        if (isMounted) {
+          console.error('Failed to load topology:', error)
+          setConnectionStatus('error')
+          setDebugInfo(`Error: ${error}`)
+        }
       }
     }
+    
     load()
-  }, [network])
-
-  // Add periodic network status checking
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        await checkNetworkStatus()
-      } catch (error) {
-        console.error('Error in periodic network check:', error)
+    
+    return () => {
+      isMounted = false
+      if (fitTimeout) {
+        clearTimeout(fitTimeout)
+        fitTimeout = null
       }
-    }, 5000) // Check every 5 seconds for faster detection
-
-    return () => clearInterval(interval)
-  }, []) // Empty dependency array to avoid infinite loops
+    }
+  }, [network])
 
   const [query, setQuery] = useState('')
   const [sidebar, setSidebar] = useState<any>({ device: null, interfaces: [], selectedIf: null, metrics: null })
@@ -137,11 +193,86 @@ export const App: React.FC = () => {
   const [networkStatus, setNetworkStatus] = useState<any>({ connected: true, error: null })
   const [debugData, setDebugData] = useState<any>({ unknown_devices: [], count: 0, total_devices: 0 })
   const [debugDataLoaded, setDebugDataLoaded] = useState(false)
-  const [activeTab, setActiveTab] = useState<'devices' | 'debug'>('devices')
+  const [activeTab, setActiveTab] = useState<'devices' | 'debug' | 'history' | 'grouped'>('devices')
   const [showNetworkAlert, setShowNetworkAlert] = useState(false)
   const [showIdentifyModal, setShowIdentifyModal] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<any>(null)
   const [identifyForm, setIdentifyForm] = useState({ vendor: '', model: '', hostname: '', notes: '' })
+  const [deviceHistory, setDeviceHistory] = useState<any[]>([])
+  const [deviceSessionStats, setDeviceSessionStats] = useState<any>(null)
+  const [recentEvents, setRecentEvents] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [groupedDevices, setGroupedDevices] = useState<Record<string, any[]>>({})
+  const [groupingStats, setGroupingStats] = useState<Record<string, Record<string, number>>>({})
+  const [groupBy, setGroupBy] = useState<string>('vendor')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  // Add periodic network status checking
+  useEffect(() => {
+    let interval: number | null = null
+    let isMounted = true
+    
+    const startInterval = () => {
+      interval = setInterval(async () => {
+        if (!isMounted) return
+        
+        try {
+          await checkNetworkStatus()
+          // Load recent events for history tab
+          if (activeTab === 'history' && isMounted) {
+            const events = await fetchRecentEvents(24)
+            if (isMounted) {
+              setRecentEvents(events)
+            }
+          }
+        } catch (error) {
+          if (isMounted) {
+            console.error('Error in periodic network check:', error)
+          }
+        }
+      }, 5000) // Check every 5 seconds for faster detection
+    }
+    
+    startInterval()
+
+    return () => {
+      isMounted = false
+      if (interval) {
+        clearInterval(interval)
+        interval = null
+      }
+    }
+  }, [activeTab]) // Include activeTab in dependencies
+
+  // Load grouped devices
+  const loadGroupedDevices = async (groupByParam?: string) => {
+    try {
+      const currentGroupBy = groupByParam || groupBy
+      const grouped = await fetchGroupedDevices(currentGroupBy)
+      setGroupedDevices(grouped)
+      
+      // Auto-expand groups with few devices
+      const newExpanded = new Set<string>()
+      Object.keys(grouped).forEach(groupName => {
+        if (grouped[groupName].length <= 5) {
+          newExpanded.add(groupName)
+        }
+      })
+      setExpandedGroups(newExpanded)
+    } catch (error) {
+      console.error('Failed to load grouped devices:', error)
+    }
+  }
+
+  // Load grouping stats
+  const loadGroupingStats = async () => {
+    try {
+      const stats = await fetchGroupingStats()
+      setGroupingStats(stats)
+    } catch (error) {
+      console.error('Failed to load grouping stats:', error)
+    }
+  }
 
   const onSearch = () => {
     if (!network) return
@@ -426,6 +557,43 @@ export const App: React.FC = () => {
                   style={{
                     padding: '8px 16px',
                     border: 'none',
+                    background: activeTab === 'history' ? '#28a745' : 'transparent',
+                    color: activeTab === 'history' ? 'white' : '#666',
+                    cursor: 'pointer',
+                    borderRadius: '4px 4px 0 0',
+                    marginRight: '4px'
+                  }}
+                  onClick={() => {
+                    setActiveTab('history')
+                    // Load recent events when switching to history tab
+                    fetchRecentEvents(24).then(setRecentEvents).catch(console.error)
+                  }}
+                >
+                  History
+                </button>
+                <button
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: activeTab === 'grouped' ? '#6f42c1' : 'transparent',
+                    color: activeTab === 'grouped' ? 'white' : '#666',
+                    cursor: 'pointer',
+                    borderRadius: '4px 4px 0 0',
+                    marginRight: '4px'
+                  }}
+                  onClick={() => {
+                    setActiveTab('grouped')
+                    // Load grouped devices when switching to grouped tab
+                    loadGroupedDevices()
+                    loadGroupingStats()
+                  }}
+                >
+                  Grouped
+                </button>
+                <button
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
                     background: activeTab === 'debug' ? '#dc3545' : 'transparent',
                     color: activeTab === 'debug' ? 'white' : '#666',
                     cursor: 'pointer',
@@ -493,6 +661,138 @@ export const App: React.FC = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Grouped Devices Tab */}
+              {activeTab === 'grouped' && (
+                <div>
+                  <h3 style={{ marginTop: 0, marginBottom: 16 }}>Grouped Devices</h3>
+                  
+                  {/* Group By Selector */}
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ marginRight: '10px', fontWeight: 'bold' }}>Group by:</label>
+                    <select 
+                      value={groupBy} 
+                      onChange={(e) => {
+                        setGroupBy(e.target.value)
+                        loadGroupedDevices(e.target.value)
+                      }}
+                      style={{ 
+                        padding: '6px 12px', 
+                        border: '1px solid #ccc', 
+                        borderRadius: '4px',
+                        fontSize: '14px'
+                      }}
+                      aria-label="Group devices by"
+                    >
+                      <option value="vendor">Vendor</option>
+                      <option value="status">Status</option>
+                      <option value="connection_type">Connection Type</option>
+                      <option value="device_type">Device Type</option>
+                    </select>
+                  </div>
+
+                  {/* Grouping Stats */}
+                  {groupingStats && Object.keys(groupingStats).length > 0 && (
+                    <div style={{ marginBottom: 20, padding: '12px', background: '#f8f9fa', borderRadius: '6px' }}>
+                      <h4 style={{ marginTop: 0, marginBottom: 8 }}>Statistics</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px' }}>
+                        {Object.entries(groupingStats[groupBy] || {}).map(([key, count]) => (
+                          <div key={key} style={{ fontSize: '12px', color: '#666' }}>
+                            <strong>{key}:</strong> {count} device{count !== 1 ? 's' : ''}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Grouped Devices */}
+                  <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                    {groupedDevices && Object.keys(groupedDevices).length > 0 ? (
+                      Object.entries(groupedDevices).map(([groupName, devices]) => (
+                        <div key={groupName} style={{ marginBottom: '16px', border: '1px solid #ddd', borderRadius: '6px' }}>
+                          <div 
+                            style={{ 
+                              padding: '12px', 
+                              background: '#f8f9fa', 
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              fontWeight: 'bold'
+                            }}
+                            onClick={() => {
+                              const newExpanded = new Set(expandedGroups)
+                              if (newExpanded.has(groupName)) {
+                                newExpanded.delete(groupName)
+                              } else {
+                                newExpanded.add(groupName)
+                              }
+                              setExpandedGroups(newExpanded)
+                            }}
+                          >
+                            <span>
+                              {groupName} ({devices.length} device{devices.length !== 1 ? 's' : ''})
+                            </span>
+                            <span style={{ fontSize: '18px' }}>
+                              {expandedGroups.has(groupName) ? '▼' : '▶'}
+                            </span>
+                          </div>
+                          
+                          {expandedGroups.has(groupName) && (
+                            <div style={{ padding: '12px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '8px' }}>
+                                {devices.map((device: any) => (
+                                  <div 
+                                    key={device.id}
+                                    style={{ 
+                                      padding: '8px', 
+                                      border: '1px solid #eee', 
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      background: device.status === 'up' ? '#f8fff8' : '#fff8f8'
+                                    }}
+                                    onClick={() => {
+                                      // Select device in network
+                                      if (network) {
+                                        (network as any).selectNodes([device.id])
+                                        (network as any).focus(device.id, { scale: 1.1 })
+                                      }
+                                    }}
+                                  >
+                                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                                      {device.hostname || device.deviceName || device.mgmtIp}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666' }}>
+                                      <div>IP: {device.mgmtIp}</div>
+                                      <div>Vendor: {device.vendor || 'Unknown'}</div>
+                                      <div>Model: {device.model || 'Unknown'}</div>
+                                      <div>Status: 
+                                        <span style={{ 
+                                          color: device.status === 'up' ? '#28a745' : '#dc3545',
+                                          fontWeight: 'bold'
+                                        }}>
+                                          {device.status || 'Unknown'}
+                                        </span>
+                                      </div>
+                                      {device.connectionType && (
+                                        <div>Type: {device.connectionType}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                        No devices found. Try running discovery first.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -569,6 +869,148 @@ export const App: React.FC = () => {
                           <div>No unknown vendors found! All devices have been identified.</div>
                         </div>
                       )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* History Tab */}
+              {activeTab === 'history' && (
+                <div>
+                  <h3 style={{ marginTop: 0, marginBottom: 16 }}>Device History</h3>
+                  
+                  {/* Recent Events Section */}
+                  <div style={{ marginBottom: 24 }}>
+                    <h4 style={{ marginBottom: 12 }}>Recent Events (Last 24 Hours)</h4>
+                    <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px' }}>
+                      {recentEvents.length > 0 ? (
+                        recentEvents.map((event: any) => (
+                          <div key={event.id} style={{ 
+                            padding: '12px', 
+                            borderBottom: '1px solid #eee',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}>
+                            <div>
+                              <div style={{ fontWeight: 'bold' }}>
+                                {event.event_type === 'online' ? '🟢' : 
+                                 event.event_type === 'offline' ? '🔴' : 
+                                 event.event_type === 'ip_change' ? '🔄' : '📊'} 
+                                {event.event_type.charAt(0).toUpperCase() + event.event_type.slice(1)}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#666' }}>
+                                Device: {event.device_id}
+                                {event.new_ip && ` → ${event.new_ip}`}
+                                {event.duration_seconds && ` (${Math.round(event.duration_seconds / 60)}m)`}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#999' }}>
+                              {new Date(event.event_timestamp).toLocaleString()}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                          No recent events found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Selected Device History */}
+                  {sidebar.device && (
+                    <div>
+                      <h4 style={{ marginBottom: 12 }}>
+                        {sidebar.device.device_name || sidebar.device.hostname || sidebar.device.id} History
+                      </h4>
+                      
+                      {historyLoading ? (
+                        <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                          Loading device history...
+                        </div>
+                      ) : (
+                        <>
+                          {/* Session Stats */}
+                          {deviceSessionStats && (
+                            <div style={{ 
+                              background: '#f8f9fa', 
+                              padding: '12px', 
+                              borderRadius: '4px', 
+                              marginBottom: '16px',
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                              gap: '12px'
+                            }}>
+                              <div>
+                                <div style={{ fontSize: '12px', color: '#666' }}>Total Sessions</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                                  {deviceSessionStats.total_sessions}
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '12px', color: '#666' }}>Avg Session</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                                  {deviceSessionStats.avg_session_duration_seconds 
+                                    ? `${Math.round(deviceSessionStats.avg_session_duration_seconds / 60)}m`
+                                    : 'N/A'}
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '12px', color: '#666' }}>Total Online Time</div>
+                                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                                  {deviceSessionStats.total_online_time_seconds 
+                                    ? `${Math.round(deviceSessionStats.total_online_time_seconds / 3600)}h`
+                                    : 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Device History List */}
+                          <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #ddd', borderRadius: '4px' }}>
+                            {deviceHistory.length > 0 ? (
+                              deviceHistory.map((event: any) => (
+                                <div key={event.id} style={{ 
+                                  padding: '12px', 
+                                  borderBottom: '1px solid #eee',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center'
+                                }}>
+                                  <div>
+                                    <div style={{ fontWeight: 'bold' }}>
+                                      {event.event_type === 'online' ? '🟢' : 
+                                       event.event_type === 'offline' ? '🔴' : 
+                                       event.event_type === 'ip_change' ? '🔄' : '📊'} 
+                                      {event.event_type.charAt(0).toUpperCase() + event.event_type.slice(1)}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#666' }}>
+                                      {event.previous_ip && event.new_ip && `${event.previous_ip} → ${event.new_ip}`}
+                                      {event.previous_status && event.new_status && `${event.previous_status} → ${event.new_status}`}
+                                      {event.duration_seconds && ` (${Math.round(event.duration_seconds / 60)}m session)`}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: '12px', color: '#999' }}>
+                                    {new Date(event.event_timestamp).toLocaleString()}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                                No history found for this device
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {!sidebar.device && (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                      <div style={{ fontSize: '24px', marginBottom: '8px' }}>📊</div>
+                      <div>Select a device to view its history</div>
                     </div>
                   )}
                 </div>
