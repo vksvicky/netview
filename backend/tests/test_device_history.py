@@ -69,11 +69,12 @@ def sample_devices():
 class TestDeviceHistoryService:
     """Test the DeviceHistoryService class"""
     
-    def test_track_device_event_online(self, sample_device):
+    @pytest.mark.asyncio
+    async def test_track_device_event_online(self, sample_device):
         """Test tracking an online event"""
         session = SessionLocal()
         
-        history = device_history_service.track_device_event(
+        history = await device_history_service.track_device_event(
             db=session,
             device_id=sample_device.id,
             event_type="online",
@@ -93,7 +94,8 @@ class TestDeviceHistoryService:
         
         session.close()
     
-    def test_track_device_event_offline_with_duration(self, sample_device):
+    @pytest.mark.asyncio
+    async def test_track_device_event_offline_with_duration(self, sample_device):
         """Test tracking an offline event with session duration"""
         session = SessionLocal()
         
@@ -104,7 +106,7 @@ class TestDeviceHistoryService:
             "status": "up"
         }
         
-        history = device_history_service.track_device_event(
+        history = await device_history_service.track_device_event(
             db=session,
             device_id=sample_device.id,
             event_type="offline",
@@ -126,11 +128,12 @@ class TestDeviceHistoryService:
         
         session.close()
     
-    def test_track_device_event_ip_change(self, sample_device):
+    @pytest.mark.asyncio
+    async def test_track_device_event_ip_change(self, sample_device):
         """Test tracking an IP change event"""
         session = SessionLocal()
         
-        history = device_history_service.track_device_event(
+        history = await device_history_service.track_device_event(
             db=session,
             device_id=sample_device.id,
             event_type="ip_change",
@@ -147,7 +150,8 @@ class TestDeviceHistoryService:
         
         session.close()
     
-    def test_process_device_discovery_new_device(self):
+    @pytest.mark.asyncio
+    async def test_process_device_discovery_new_device(self):
         """Test processing discovery with new devices"""
         session = SessionLocal()
         
@@ -164,7 +168,7 @@ class TestDeviceHistoryService:
         
         existing_devices = []
         
-        history_events = device_history_service.process_device_discovery(
+        history_events = await device_history_service.process_device_discovery(
             db=session,
             discovered_devices=discovered_devices,
             existing_devices=existing_devices
@@ -179,7 +183,8 @@ class TestDeviceHistoryService:
         
         session.close()
     
-    def test_process_device_discovery_existing_device_changes(self, sample_device):
+    @pytest.mark.asyncio
+    async def test_process_device_discovery_existing_device_changes(self, sample_device):
         """Test processing discovery with existing device changes"""
         session = SessionLocal()
         
@@ -196,7 +201,7 @@ class TestDeviceHistoryService:
         
         existing_devices = [sample_device]
         
-        history_events = device_history_service.process_device_discovery(
+        history_events = await device_history_service.process_device_discovery(
             db=session,
             discovered_devices=discovered_devices,
             existing_devices=existing_devices
@@ -220,14 +225,15 @@ class TestDeviceHistoryService:
         
         session.close()
     
-    def test_process_device_discovery_device_offline(self, sample_device):
+    @pytest.mark.asyncio
+    async def test_process_device_discovery_device_offline(self, sample_device):
         """Test processing discovery when device goes offline"""
         session = SessionLocal()
         
         discovered_devices = []  # No devices discovered
         existing_devices = [sample_device]
         
-        history_events = device_history_service.process_device_discovery(
+        history_events = await device_history_service.process_device_discovery(
             db=session,
             discovered_devices=discovered_devices,
             existing_devices=existing_devices
@@ -619,7 +625,8 @@ class TestDeviceHistoryAPI:
 class TestDeviceHistoryIntegration:
     """Integration tests for device history with discovery service"""
     
-    def test_discovery_service_tracks_history(self):
+    @pytest.mark.asyncio
+    async def test_discovery_service_tracks_history(self):
         """Test that discovery service automatically tracks device history"""
         session = SessionLocal()
         
@@ -638,7 +645,7 @@ class TestDeviceHistoryIntegration:
         existing_devices = []
         
         # Process discovery
-        history_events = device_history_service.process_device_discovery(
+        history_events = await device_history_service.process_device_discovery(
             db=session,
             discovered_devices=discovered_devices,
             existing_devices=existing_devices

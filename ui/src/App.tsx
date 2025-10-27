@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings, fetchDeviceHistory, fetchDeviceSessionStats, fetchRecentEvents, fetchGroupedDevices, fetchGroupingStats, fetchNotifications, fetchUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, acknowledgeNotification, fetchNotificationStats, createTestNotification, deleteNotification, clearAllNotifications } from './api'
+import { wsService, DeviceUpdateMessage, TopologyUpdateMessage, NotificationMessage } from './websocket'
 import HelpPage from './HelpPage'
 
 console.log('App component loading...')
@@ -219,46 +220,69 @@ const App: React.FC = () => {
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
 
-  // Add periodic network status checking
+  // WebSocket connection and real-time updates
   useEffect(() => {
-    let interval: number | null = null
     let isMounted = true
     
-    const startInterval = () => {
-      interval = setInterval(async () => {
-        if (!isMounted) return
+    const initializeWebSocket = async () => {
+      try {
+        // Connect to WebSocket
+        await wsService.connect()
         
-        try {
-          await checkNetworkStatus()
-          // Load recent events for history tab
-          if (activeTab === 'history' && isMounted) {
-            const events = await fetchRecentEvents(24)
-            if (isMounted) {
-              setRecentEvents(events)
+        // Subscribe to connection status changes
+        wsService.onConnectionChange((connected) => {
+          if (isMounted) {
+            setDebugInfo(connected ? 'WebSocket connected - Real-time updates active' : 'WebSocket disconnected')
+          }
+        })
+        
+        // Subscribe to topology updates
+        wsService.subscribe('topology_update', (data: any) => {
+          if (isMounted && network) {
+            console.log('📡 Real-time topology update received:', data)
+            setTopologyData(data)
+            network.setData(data)
+            network.fit()
+          }
+        })
+        
+        // Subscribe to device updates
+        wsService.subscribe('device_update', (data: any) => {
+          if (isMounted) {
+            console.log('📡 Real-time device update received:', data)
+            // Update device list if needed
+            if (activeTab === 'devices') {
+              loadGroupedDevices()
             }
           }
-          // Load unread notification count
+        })
+        
+        // Subscribe to notifications
+        wsService.subscribe('notification', (data: any) => {
           if (isMounted) {
-            await loadUnreadCount()
+            console.log('📡 Real-time notification received:', data)
+            // Add notification to the list
+            setNotifications(prev => [data, ...prev])
+            // Update unread count
+            setUnreadCount(prev => prev + 1)
           }
-        } catch (error) {
-          if (isMounted) {
-            console.error('Error in periodic network check:', error)
-          }
+        })
+        
+      } catch (error) {
+        console.error('Failed to initialize WebSocket:', error)
+        if (isMounted) {
+          setDebugInfo('WebSocket connection failed')
         }
-      }, 5000) // Check every 5 seconds for faster detection
-    }
-    
-    startInterval()
-
-    return () => {
-      isMounted = false
-      if (interval) {
-        clearInterval(interval)
-        interval = null
       }
     }
-  }, [activeTab]) // Include activeTab in dependencies
+    
+    initializeWebSocket()
+    
+    return () => {
+      isMounted = false
+      wsService.disconnect()
+    }
+  }, [network, activeTab])
 
   // Load grouped devices
   const loadGroupedDevices = async (groupByParam?: string) => {
@@ -562,6 +586,7 @@ const App: React.FC = () => {
         <button onClick={onSearch}>Search</button>
         <button onClick={onDiscoverNow}>Discover now</button>
         <button onClick={checkNetworkStatus}>Refresh Network Status</button>
+        
         <button 
           onClick={() => setShowHelp(true)}
           title="Open Help"

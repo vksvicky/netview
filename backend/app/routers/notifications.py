@@ -173,7 +173,7 @@ def delete_notification(
 
 
 @router.post("/test")
-def create_test_notification(
+async def create_test_notification(
     notification_type: str = Query("info"),
     title: str = Query("Test Notification"),
     message: str = Query("This is a test notification"),
@@ -183,7 +183,7 @@ def create_test_notification(
     """Create a test notification (for development/testing)"""
     
     try:
-        notification = notification_service.create_notification(
+        notification = await notification_service.create_notification(
             db=db,
             notification_type=notification_type,
             title=title,

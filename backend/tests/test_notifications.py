@@ -71,11 +71,12 @@ def sample_notifications():
 class TestNotificationService:
     """Test the NotificationService class"""
     
-    def test_create_notification(self):
+    @pytest.mark.asyncio
+    async def test_create_notification(self):
         """Test creating a notification"""
         session = SessionLocal()
         
-        notification = notification_service.create_notification(
+        notification = await notification_service.create_notification(
             db=session,
             notification_type="new_device",
             device_id="test-device-1",
@@ -95,7 +96,8 @@ class TestNotificationService:
         
         session.close()
     
-    def test_create_notification_with_template(self):
+    @pytest.mark.asyncio
+    async def test_create_notification_with_template(self):
         """Test creating a notification using template"""
         session = SessionLocal()
         
@@ -112,7 +114,7 @@ class TestNotificationService:
         session.add(device)
         session.commit()
         
-        notification = notification_service.create_notification(
+        notification = await notification_service.create_notification(
             db=session,
             notification_type="new_device",
             device_id="test-device-2"
@@ -332,12 +334,13 @@ class TestNotificationService:
         
         session.close()
     
-    def test_process_device_event(self, sample_device):
+    @pytest.mark.asyncio
+    async def test_process_device_event(self, sample_device):
         """Test processing device events"""
         session = SessionLocal()
         
         # Test online event
-        notification = notification_service.process_device_event(
+        notification = await notification_service.process_device_event(
             session, 
             sample_device.id, 
             "online",
@@ -349,7 +352,7 @@ class TestNotificationService:
         assert notification.device_id == sample_device.id
         
         # Test offline event
-        notification = notification_service.process_device_event(
+        notification = await notification_service.process_device_event(
             session, 
             sample_device.id, 
             "offline",
@@ -360,7 +363,7 @@ class TestNotificationService:
         assert notification.notification_type == "device_offline"
         
         # Test IP change event
-        notification = notification_service.process_device_event(
+        notification = await notification_service.process_device_event(
             session, 
             sample_device.id, 
             "ip_change",
@@ -372,7 +375,8 @@ class TestNotificationService:
         
         session.close()
     
-    def test_process_new_device(self):
+    @pytest.mark.asyncio
+    async def test_process_new_device(self):
         """Test processing new device detection"""
         session = SessionLocal()
         
@@ -383,7 +387,7 @@ class TestNotificationService:
             "model": "New Model"
         }
         
-        notification = notification_service.process_new_device(
+        notification = await notification_service.process_new_device(
             session, "new-device-1", device_data
         )
         
@@ -395,7 +399,8 @@ class TestNotificationService:
         
         session.close()
     
-    def test_process_unknown_device(self):
+    @pytest.mark.asyncio
+    async def test_process_unknown_device(self):
         """Test processing unknown device detection"""
         session = SessionLocal()
         
@@ -406,7 +411,7 @@ class TestNotificationService:
             "model": "Unknown"
         }
         
-        notification = notification_service.process_new_device(
+        notification = await notification_service.process_new_device(
             session, "unknown-device-1", device_data
         )
         
@@ -578,7 +583,8 @@ class TestNotificationAPI:
 class TestNotificationIntegration:
     """Test notification integration with other services"""
     
-    def test_notification_creation_on_device_discovery(self):
+    @pytest.mark.asyncio
+    async def test_notification_creation_on_device_discovery(self):
         """Test that notifications are created during device discovery"""
         # This would require mocking the discovery service
         # For now, we'll test the integration points
@@ -586,7 +592,7 @@ class TestNotificationIntegration:
         session = SessionLocal()
         
         # Simulate device discovery creating a notification
-        notification = notification_service.process_new_device(
+        notification = await notification_service.process_new_device(
             session,
             "discovered-device-1",
             {
@@ -603,12 +609,13 @@ class TestNotificationIntegration:
         
         session.close()
     
-    def test_notification_creation_on_device_status_change(self, sample_device):
+    @pytest.mark.asyncio
+    async def test_notification_creation_on_device_status_change(self, sample_device):
         """Test that notifications are created on device status changes"""
         session = SessionLocal()
         
         # Simulate device going offline
-        notification = notification_service.process_device_event(
+        notification = await notification_service.process_device_event(
             session,
             sample_device.id,
             "offline",

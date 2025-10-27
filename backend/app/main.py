@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.responses import Response
 
-from .routers import devices, interfaces, topology, alerts, metrics as metrics_router, oui, user_settings, device_history, notifications
+from .routers import devices, interfaces, topology, alerts, metrics as metrics_router, oui, user_settings, device_history, notifications, websocket
 from .scheduler import start_scheduler
 from .metrics import registry, http_requests_total
 from .db import initialize_database
@@ -60,5 +60,6 @@ app.include_router(oui.router, prefix="/oui", tags=["OUI Database"])
 app.include_router(user_settings.router, prefix="/user-settings", tags=["User Settings"])
 app.include_router(device_history.router, prefix="/device-history", tags=["Device History"])
 app.include_router(notifications.router, prefix="/notifications", tags=["Notifications"])
+app.include_router(websocket.router, tags=["WebSocket"])
 
 

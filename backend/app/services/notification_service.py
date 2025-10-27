@@ -48,7 +48,7 @@ class NotificationService:
             }
         }
     
-    def create_notification(
+    async def create_notification(
         self,
         db: Session,
         notification_type: str,
@@ -100,6 +100,25 @@ class NotificationService:
         db.add(notification)
         db.commit()
         db.refresh(notification)
+        
+        # Broadcast notification via WebSocket
+        try:
+            from ..routers.websocket import manager
+            await manager.broadcast_notification({
+                "id": notification.id,
+                "type": notification.notification_type,
+                "title": notification.title,
+                "message": notification.message,
+                "device_id": notification.device_id,
+                "severity": notification.severity,
+                "is_read": notification.is_read,
+                "is_acknowledged": notification.is_acknowledged,
+                "created_at": notification.created_at.isoformat(),
+                "notification_data": notification.notification_data
+            })
+        except Exception as e:
+            # Don't fail notification creation if WebSocket broadcast fails
+            print(f"⚠️ Failed to broadcast notification via WebSocket: {e}")
         
         return notification
     
@@ -232,7 +251,7 @@ class NotificationService:
             'period_days': days_back
         }
     
-    def process_device_event(self, db: Session, device_id: str, event_type: str, event_data: Dict) -> Optional[Notification]:
+    async def process_device_event(self, db: Session, device_id: str, event_type: str, event_data: Dict) -> Optional[Notification]:
         """Process device events and create notifications based on rules"""
         
         # Check if we should create a notification for this event type
@@ -253,7 +272,7 @@ class NotificationService:
                 'new_ip': event_data.get('new_ip')
             }
             
-            return self.create_notification(
+            return await self.create_notification(
                 db=db,
                 notification_type=notification_type,
                 device_id=device_id,
@@ -262,7 +281,7 @@ class NotificationService:
         
         return None
     
-    def process_new_device(self, db: Session, device_id: str, device_data: Dict) -> Notification:
+    async def process_new_device(self, db: Session, device_id: str, device_data: Dict) -> Notification:
         """Process new device detection and create notification"""
         
         # Determine if device is unknown
@@ -278,7 +297,7 @@ class NotificationService:
             'model': device_data.get('model', 'Unknown')
         }
         
-        return self.create_notification(
+        return await self.create_notification(
             db=db,
             notification_type=notification_type,
             device_id=device_id,

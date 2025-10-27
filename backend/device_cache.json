@@ -29,20 +29,6 @@
       "device_name": "Espressif Device"
     },
     {
-      "id": "192.168.1.13",
-      "hostname": "Intel Device",
-      "mgmtIp": "192.168.1.13",
-      "vendor": "Intel Corporate",
-      "model": "Unknown",
-      "status": "up",
-      "type": "device",
-      "mac": "1c:99:57:b3:1d:2",
-      "discovery_method": "arp_simple",
-      "connection_type": "Wireless (2.4GHz/5GHz)",
-      "ip_version": "IPv4",
-      "device_name": "Intel Device"
-    },
-    {
       "id": "192.168.1.19",
       "hostname": "Device-19",
       "mgmtIp": "192.168.1.19",
@@ -113,5 +99,5 @@
       "device_name": "Device-255"
     }
   ],
-  "last_update": "2025-10-27T17:17:33.922773"
+  "last_update": "2025-10-27T18:17:05.356672"
 }

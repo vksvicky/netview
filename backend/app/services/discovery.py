@@ -43,7 +43,7 @@ class DiscoveryService:
         
         # Track device history changes before making any modifications
         if devices:  # Only track history if we have discovered devices
-            history_events = device_history_service.process_device_discovery(
+            history_events = await device_history_service.process_device_discovery(
                 db=db,
                 discovered_devices=devices,
                 existing_devices=existing_devices
@@ -56,7 +56,7 @@ class DiscoveryService:
                     device_id = device_data.get("id") or device_data.get("mgmtIp")
                     if device_id and device_id not in {d.id for d in existing_devices}:
                         # This is a new device
-                        notification_service.process_new_device(db, device_id, device_data)
+                        await notification_service.process_new_device(db, device_id, device_data)
             except Exception:
                 # Don't fail discovery if notification fails
                 pass
@@ -145,6 +145,15 @@ class DiscoveryService:
             db.add(edge)
 
         db.commit()
+        
+        # Broadcast topology update via WebSocket
+        try:
+            from ..routers.websocket import manager
+            await manager.broadcast_topology_update(topo)
+            print(f"📡 Broadcasted topology update to {manager.get_connection_count()} WebSocket clients")
+        except Exception as e:
+            print(f"⚠️ Failed to broadcast topology update: {e}")
+        
         return topo
 
 

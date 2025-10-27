@@ -12,7 +12,7 @@ class DeviceHistoryService:
     def __init__(self):
         self.device_sessions: Dict[str, Dict] = {}  # Track active sessions
     
-    def track_device_event(
+    async def track_device_event(
         self, 
         db: Session, 
         device_id: str, 
@@ -56,7 +56,7 @@ class DeviceHistoryService:
                 'previous_ip': previous_ip,
                 'new_ip': new_ip
             }
-            notification_service.process_device_event(db, device_id, event_type, event_data)
+            await notification_service.process_device_event(db, device_id, event_type, event_data)
         except Exception:
             # Don't fail history tracking if notification fails
             pass
@@ -71,7 +71,7 @@ class DeviceHistoryService:
         
         return history
     
-    def process_device_discovery(
+    async def process_device_discovery(
         self, 
         db: Session, 
         discovered_devices: List[Dict], 
@@ -87,7 +87,7 @@ class DeviceHistoryService:
         for device_id, device_data in discovered_device_map.items():
             if device_id not in existing_device_map:
                 # New device discovered
-                history = self.track_device_event(
+                history = await self.track_device_event(
                     db=db,
                     device_id=device_id,
                     event_type="online",
@@ -109,7 +109,7 @@ class DeviceHistoryService:
                 
                 # Check for IP changes
                 if existing_device.mgmt_ip != new_ip:
-                    history = self.track_device_event(
+                    history = await self.track_device_event(
                         db=db,
                         device_id=device_id,
                         event_type="ip_change",
@@ -124,7 +124,7 @@ class DeviceHistoryService:
                 
                 # Check for status changes
                 if existing_device.status != new_status:
-                    history = self.track_device_event(
+                    history = await self.track_device_event(
                         db=db,
                         device_id=device_id,
                         event_type="status_change",
@@ -141,7 +141,7 @@ class DeviceHistoryService:
         for device_id, existing_device in existing_device_map.items():
             if device_id not in discovered_device_map:
                 # Device no longer discovered - mark as offline
-                history = self.track_device_event(
+                history = await self.track_device_event(
                     db=db,
                     device_id=device_id,
                     event_type="offline",

@@ -250,18 +250,26 @@ This roadmap is a living document and will be updated regularly based on user fe
   - [x] Add history visualization in frontend
   - [x] Implement duration tracking for device sessions
 
-- [ ] **Notification System** - Alert users about network changes
-  - [ ] Create notification models and database schema
-  - [ ] Implement notification service with multiple channels (web, email, webhook)
-  - [ ] Add notification preferences and settings
-  - [ ] Create notification API endpoints
-  - [ ] Add notification UI components
+- [x] **Notification System** - Alert users about network changes
+  - [x] Create notification models and database schema
+  - [x] Implement notification service with multiple channels (web, email, webhook)
+  - [x] Add notification preferences and settings
+  - [x] Create notification API endpoints
+  - [x] Add notification UI components
 
-- [ ] **Device Grouping** - Organize devices by vendor, type, custom tags
-  - [ ] Add device grouping logic to backend
-  - [ ] Create grouping API endpoints
-  - [ ] Implement collapsible sections in frontend
-  - [ ] Add custom tag management
+- [x] **Device Grouping** - Organize devices by vendor, type, custom tags
+  - [x] Add device grouping logic to backend
+  - [x] Create grouping API endpoints
+  - [x] Implement collapsible sections in frontend
+  - [x] Add custom tag management
+
+- [x] **Real-time Updates** - WebSocket implementation for live monitoring
+  - [x] Add WebSocket support to FastAPI backend
+  - [x] Implement real-time device status updates
+  - [x] Create live topology change notifications
+  - [x] Update frontend to use WebSocket connections
+  - [x] Add WebSocket error handling and reconnection logic
+  - [x] Create comprehensive WebSocket tests
 
 - [ ] **Enhanced Device Identification** - Improve device classification
   - [ ] Enhance OUI database integration
@@ -270,12 +278,6 @@ This roadmap is a living document and will be updated regularly based on user fe
   - [ ] Add custom device profiles and metadata
 
 ### **Phase 2: User Experience (Following Sprint)**
-- [ ] **Real-time Updates** - WebSocket implementation
-  - [ ] Add WebSocket support to FastAPI backend
-  - [ ] Implement real-time device status updates
-  - [ ] Create live topology change notifications
-  - [ ] Update frontend to use WebSocket connections
-
 - [ ] **Advanced Filtering** - Better search and filtering
   - [ ] Add multi-criteria filtering (IP range, vendor, status, connection type)
   - [ ] Implement search autocomplete
@@ -342,11 +344,13 @@ This roadmap is a living document and will be updated regularly based on user fe
 - Interactive Topology
 - Device Management
 - Interface Details
-- Real-time Updates (Polling)
+- Real-time Updates (WebSocket)
 - Docker Support
 - Testing Framework
 - **Device History Tracking** (NEW!)
 - **Device Grouping** (NEW!)
+- **Notification System** (NEW!)
+- **WebSocket Real-time Updates** (NEW!)
 
 ### **In Progress** 🚧
 - Alerts (Placeholder)
@@ -354,12 +358,10 @@ This roadmap is a living document and will be updated regularly based on user fe
 - SNMP Discovery (Mock implementation)
 
 ### **Not Started** ❌
-- Notification System
-- Device Grouping
+- Enhanced Device Identification
 - Advanced Filtering
 - Device Profiles
 - Export/Import
-- WebSocket Updates
 - Mobile Responsive
 - Dark Mode
 
