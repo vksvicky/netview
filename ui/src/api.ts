@@ -263,7 +263,7 @@ export async function fetchNotifications(params: {
       }
     })
     
-    const resp = await fetch(`${API_BASE}/notifications/notifications?${searchParams}`)
+    const resp = await fetch(`${API_BASE}/notifications?${searchParams}`)
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     return await resp.json()
   } catch (error) {
@@ -285,7 +285,7 @@ export async function fetchUnreadNotificationCount() {
 
 export async function markNotificationAsRead(notificationId: number) {
   try {
-    const resp = await fetch(`${API_BASE}/notifications/notifications/${notificationId}/read`, {
+    const resp = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
       method: 'PUT'
     })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
@@ -311,7 +311,7 @@ export async function markAllNotificationsAsRead() {
 
 export async function acknowledgeNotification(notificationId: number, acknowledgedBy: string = 'user') {
   try {
-    const resp = await fetch(`${API_BASE}/notifications/notifications/${notificationId}/acknowledge?acknowledged_by=${acknowledgedBy}`, {
+    const resp = await fetch(`${API_BASE}/notifications/${notificationId}/acknowledge?acknowledged_by=${acknowledgedBy}`, {
       method: 'PUT'
     })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
@@ -324,12 +324,38 @@ export async function acknowledgeNotification(notificationId: number, acknowledg
 
 export async function fetchNotificationStats(daysBack: number = 7) {
   try {
-    const resp = await fetch(`${API_BASE}/notifications/notifications/stats?days_back=${daysBack}`)
+    const resp = await fetch(`${API_BASE}/notifications/stats?days_back=${daysBack}`)
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     return await resp.json()
   } catch (error) {
     console.error('Failed to fetch notification stats:', error)
     return {}
+  }
+}
+
+export async function deleteNotification(notificationId: number) {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/${notificationId}`, {
+      method: 'DELETE'
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to delete notification:', error)
+    return { success: false }
+  }
+}
+
+export async function clearAllNotifications() {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/clear-all`, {
+      method: 'DELETE'
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to clear all notifications:', error)
+    return { success: false }
   }
 }
 

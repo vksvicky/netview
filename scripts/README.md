@@ -18,6 +18,9 @@ This directory contains build, run, and test scripts for the NetView application
 - **`test-frontend.sh`** - Runs frontend tests with coverage reporting
 - **`test-fullstack.sh`** - Runs both backend and frontend tests with coverage
 
+### Utility Scripts
+- **`kill-ports.sh`** - Kills processes on specified ports (useful for troubleshooting)
+
 ## 🚀 Quick Start
 
 ### First Time Setup
@@ -50,6 +53,26 @@ This directory contains build, run, and test scripts for the NetView application
 ./scripts/test-frontend.sh
 ```
 
+## 🔧 Port Management
+
+All run scripts now automatically handle port conflicts by:
+- Checking for existing processes on required ports
+- Killing conflicting processes before starting new ones
+- Providing clear feedback about port status
+
+### Manual Port Management
+```bash
+# Kill processes on specific ports
+./scripts/kill-ports.sh 8000 5170
+
+# Kill processes on common NetView ports
+./scripts/kill-ports.sh
+```
+
+### Ports Used
+- **Backend**: 8000 (FastAPI)
+- **Frontend**: 5170-5173 (Vite development server)
+
 ## 📊 Coverage Reports
 
 After running tests, coverage reports are generated:
@@ -73,3 +96,4 @@ After running tests, coverage reports are generated:
 - Scripts automatically handle dependency installation for frontend
 - Coverage reports are generated in HTML format for easy viewing
 - Full stack scripts run both services and can be stopped with Ctrl+C
+- **Port conflicts are automatically resolved** - no more "port already in use" errors!

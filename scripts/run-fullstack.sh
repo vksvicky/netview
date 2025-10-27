@@ -9,6 +9,28 @@ set -e  # Exit on any error
 
 echo "🚀 Starting NetView Full Stack..."
 
+# Kill any existing processes on backend port 8000
+echo "🔍 Checking for existing processes on port 8000..."
+if lsof -ti:8000 >/dev/null 2>&1; then
+    echo "⚠️  Found existing processes on port 8000. Killing them..."
+    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+    sleep 1
+    echo "✅ Port 8000 is now free"
+else
+    echo "✅ Port 8000 is available"
+fi
+
+# Kill any existing processes on frontend ports
+echo "🔍 Checking for existing processes on frontend ports..."
+for port in 5170 5171 5172 5173; do
+    if lsof -ti:$port >/dev/null 2>&1; then
+        echo "⚠️  Found existing processes on port $port. Killing them..."
+        lsof -ti:$port | xargs kill -9 2>/dev/null || true
+        sleep 1
+        echo "✅ Port $port is now free"
+    fi
+done
+
 # Get the directory of this script
 SCRIPT_DIR="$(dirname "$0")"
 

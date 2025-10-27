@@ -9,6 +9,17 @@ set -e  # Exit on any error
 
 echo "🚀 Starting NetView Backend..."
 
+# Kill any existing processes on port 8000
+echo "🔍 Checking for existing processes on port 8000..."
+if lsof -ti:8000 >/dev/null 2>&1; then
+    echo "⚠️  Found existing processes on port 8000. Killing them..."
+    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+    sleep 1
+    echo "✅ Port 8000 is now free"
+else
+    echo "✅ Port 8000 is available"
+fi
+
 # Change to backend directory
 cd "$(dirname "$0")/../backend"
 

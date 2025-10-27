@@ -21,7 +21,9 @@ vi.mock('./api', () => ({
     markAllNotificationsAsRead: vi.fn().mockResolvedValue({ success: true, count: 0 }),
     acknowledgeNotification: vi.fn().mockResolvedValue({ success: true }),
     fetchNotificationStats: vi.fn().mockResolvedValue({}),
-    createTestNotification: vi.fn().mockResolvedValue({ success: true })
+    createTestNotification: vi.fn().mockResolvedValue({ success: true }),
+    deleteNotification: vi.fn().mockResolvedValue({ success: true }),
+    clearAllNotifications: vi.fn().mockResolvedValue({ success: true })
 }))
 
 describe('App', () => {

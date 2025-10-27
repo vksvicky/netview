@@ -247,6 +247,76 @@ class TestNotificationService:
         
         session.close()
     
+    def test_delete_notification(self):
+        """Test deleting a specific notification"""
+        session = SessionLocal()
+        
+        # Create a notification
+        notification = Notification(
+            notification_type="test_event",
+            title="Test Notification",
+            message="This is a test notification"
+        )
+        session.add(notification)
+        session.commit()
+        notification_id = notification.id
+        
+        # Delete the notification
+        success = notification_service.delete_notification(session, notification_id)
+        assert success == True
+        
+        # Verify the notification is deleted
+        deleted_notification = session.query(Notification).filter(
+            Notification.id == notification_id
+        ).first()
+        assert deleted_notification is None
+        
+        session.close()
+    
+    def test_delete_nonexistent_notification(self):
+        """Test deleting a notification that doesn't exist"""
+        session = SessionLocal()
+        
+        # Try to delete a non-existent notification
+        success = notification_service.delete_notification(session, 99999)
+        assert success == False
+        
+        session.close()
+    
+    def test_clear_all_notifications(self):
+        """Test clearing all notifications"""
+        session = SessionLocal()
+        
+        # Create multiple notifications
+        for i in range(3):
+            notification = Notification(
+                notification_type=f"test_event_{i}",
+                title=f"Test Notification {i}",
+                message=f"This is test notification {i}"
+            )
+            session.add(notification)
+        session.commit()
+        
+        # Clear all notifications
+        count = notification_service.clear_all_notifications(session)
+        assert count == 3
+        
+        # Verify all notifications are deleted
+        remaining = session.query(Notification).all()
+        assert len(remaining) == 0
+        
+        session.close()
+    
+    def test_clear_all_notifications_empty(self):
+        """Test clearing all notifications when none exist"""
+        session = SessionLocal()
+        
+        # Clear all notifications when none exist
+        count = notification_service.clear_all_notifications(session)
+        assert count == 0
+        
+        session.close()
+    
     def test_get_notification_stats(self, sample_notifications):
         """Test getting notification statistics"""
         session = SessionLocal()
@@ -550,3 +620,70 @@ class TestNotificationIntegration:
         assert notification.device_id == sample_device.id
         
         session.close()
+    
+    def test_delete_notification_endpoint(self):
+        """Test deleting a specific notification via API"""
+        client = TestClient(app)
+        
+        # First create a notification
+        create_response = client.post("/notifications/test?title=Test%20Delete&message=Test%20message")
+        assert create_response.status_code == 200
+        notification_id = create_response.json()["notification"]["id"]
+        
+        # Delete the notification
+        delete_response = client.delete(f"/notifications/{notification_id}")
+        assert delete_response.status_code == 200
+        assert delete_response.json()["success"] == True
+        assert delete_response.json()["message"] == "Notification deleted"
+        
+        # Verify notification is deleted
+        get_response = client.get("/notifications")
+        assert get_response.status_code == 200
+        notifications = get_response.json()
+        notification_ids = [n["id"] for n in notifications]
+        assert notification_id not in notification_ids
+    
+    def test_delete_nonexistent_notification_endpoint(self):
+        """Test deleting a notification that doesn't exist via API"""
+        client = TestClient(app)
+        
+        # Try to delete a non-existent notification
+        delete_response = client.delete("/notifications/99999")
+        assert delete_response.status_code == 404
+        assert "Notification not found" in delete_response.json()["detail"]
+    
+    def test_clear_all_notifications_endpoint(self):
+        """Test clearing all notifications via API"""
+        client = TestClient(app)
+        
+        # Create multiple notifications
+        for i in range(3):
+            client.post(f"/notifications/test?title=Test%20{i}&message=Test%20message%20{i}")
+        
+        # Verify notifications exist
+        get_response = client.get("/notifications")
+        assert get_response.status_code == 200
+        assert len(get_response.json()) == 3
+        
+        # Clear all notifications
+        clear_response = client.delete("/notifications/clear-all")
+        assert clear_response.status_code == 200
+        assert clear_response.json()["success"] == True
+        assert clear_response.json()["count"] == 3
+        assert "Deleted 3 notifications" in clear_response.json()["message"]
+        
+        # Verify all notifications are deleted
+        get_response = client.get("/notifications")
+        assert get_response.status_code == 200
+        assert len(get_response.json()) == 0
+    
+    def test_clear_all_notifications_empty_endpoint(self):
+        """Test clearing all notifications when none exist via API"""
+        client = TestClient(app)
+        
+        # Clear all notifications when none exist
+        clear_response = client.delete("/notifications/clear-all")
+        assert clear_response.status_code == 200
+        assert clear_response.json()["success"] == True
+        assert clear_response.json()["count"] == 0
+        assert "Deleted 0 notifications" in clear_response.json()["message"]

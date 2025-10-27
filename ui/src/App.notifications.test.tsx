@@ -72,7 +72,9 @@ vi.mock('./api', () => ({
     by_severity: { info: 1, warning: 1 },
     period_days: 7
   }),
-  createTestNotification: vi.fn().mockResolvedValue({ success: true })
+  createTestNotification: vi.fn().mockResolvedValue({ success: true }),
+  deleteNotification: vi.fn().mockResolvedValue({ success: true }),
+  clearAllNotifications: vi.fn().mockResolvedValue({ success: true })
 }))
 
 describe('Notification System Feature', () => {

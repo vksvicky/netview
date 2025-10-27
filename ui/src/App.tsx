@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings, fetchDeviceHistory, fetchDeviceSessionStats, fetchRecentEvents, fetchGroupedDevices, fetchGroupingStats, fetchNotifications, fetchUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, acknowledgeNotification, fetchNotificationStats, createTestNotification } from './api'
+import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings, fetchDeviceHistory, fetchDeviceSessionStats, fetchRecentEvents, fetchGroupedDevices, fetchGroupingStats, fetchNotifications, fetchUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, acknowledgeNotification, fetchNotificationStats, createTestNotification, deleteNotification, clearAllNotifications } from './api'
+import HelpPage from './HelpPage'
 
 console.log('App component loading...')
 
@@ -216,6 +217,7 @@ const App: React.FC = () => {
   const [showNotificationPanel, setShowNotificationPanel] = useState(false)
   const [notificationStats, setNotificationStats] = useState<any>(null)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
   // Add periodic network status checking
   useEffect(() => {
@@ -352,6 +354,29 @@ const App: React.FC = () => {
       )
     } catch (error) {
       console.error('Failed to acknowledge notification:', error)
+    }
+  }
+
+  const handleDeleteNotification = async (notificationId: number) => {
+    try {
+      await deleteNotification(notificationId)
+      // Remove from local state
+      setNotifications(prev => prev.filter(n => n.id !== notificationId))
+      // Reload unread count
+      await loadUnreadCount()
+    } catch (error) {
+      console.error('Failed to delete notification:', error)
+    }
+  }
+
+  const handleClearAllNotifications = async () => {
+    try {
+      await clearAllNotifications()
+      // Clear local state
+      setNotifications([])
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Failed to clear all notifications:', error)
     }
   }
 
@@ -537,6 +562,12 @@ const App: React.FC = () => {
         <button onClick={onSearch}>Search</button>
         <button onClick={onDiscoverNow}>Discover now</button>
         <button onClick={checkNetworkStatus}>Refresh Network Status</button>
+        <button 
+          onClick={() => setShowHelp(true)}
+          title="Open Help"
+        >
+          📖 Help
+        </button>
         
         {/* Notification Bell */}
         <div style={{ position: 'relative', marginLeft: '16px' }}>
@@ -604,7 +635,7 @@ const App: React.FC = () => {
           border: '1px solid #ddd',
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          zIndex: 1001,
+          zIndex: 2000,
           display: 'flex',
           flexDirection: 'column'
         }}>
@@ -645,6 +676,20 @@ const App: React.FC = () => {
                 }}
               >
                 Mark All Read
+              </button>
+              <button
+                onClick={handleClearAllNotifications}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  background: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear All
               </button>
               <button
                 onClick={() => setShowNotificationPanel(false)}
@@ -799,6 +844,23 @@ const App: React.FC = () => {
                           Ack
                         </button>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteNotification(notification.id)
+                        }}
+                        style={{
+                          padding: '2px 6px',
+                          fontSize: '10px',
+                          background: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Delete
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1526,6 +1588,11 @@ const App: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Help Page */}
+      {showHelp && (
+        <HelpPage onClose={() => setShowHelp(false)} />
       )}
     </div>
   )

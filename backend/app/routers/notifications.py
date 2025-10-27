@@ -128,6 +128,17 @@ def get_notification_stats(
         raise HTTPException(status_code=500, detail=f"Error retrieving notification stats: {str(e)}")
 
 
+@router.delete("/clear-all")
+def clear_all_notifications(db: Session = Depends(get_db)) -> dict:
+    """Delete all notifications"""
+    
+    try:
+        count = notification_service.clear_all_notifications(db)
+        return {"success": True, "count": count, "message": f"Deleted {count} notifications"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing all notifications: {str(e)}")
+
+
 @router.delete("/cleanup")
 def cleanup_old_notifications(
     days_old: int = Query(30, ge=1, le=365),
@@ -140,6 +151,25 @@ def cleanup_old_notifications(
         return {"success": True, "count": count, "message": f"Deleted {count} old notifications"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error cleaning up notifications: {str(e)}")
+
+
+@router.delete("/{notification_id}")
+def delete_notification(
+    notification_id: int,
+    db: Session = Depends(get_db)
+) -> dict:
+    """Delete a specific notification"""
+    
+    try:
+        success = notification_service.delete_notification(db, notification_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        
+        return {"success": True, "message": "Notification deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting notification: {str(e)}")
 
 
 @router.post("/test")

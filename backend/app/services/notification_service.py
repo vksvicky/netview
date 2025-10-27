@@ -172,6 +172,22 @@ class NotificationService:
             return True
         return False
     
+    def delete_notification(self, db: Session, notification_id: int) -> bool:
+        """Delete a specific notification"""
+        notification = db.query(Notification).filter(Notification.id == notification_id).first()
+        if notification:
+            db.delete(notification)
+            db.commit()
+            return True
+        return False
+    
+    def clear_all_notifications(self, db: Session) -> int:
+        """Delete all notifications"""
+        count = db.query(Notification).count()
+        db.query(Notification).delete()
+        db.commit()
+        return count
+    
     def delete_old_notifications(self, db: Session, days_old: int = 30) -> int:
         """Delete notifications older than specified days"""
         cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days_old)

@@ -29,18 +29,18 @@
       "device_name": "Espressif Device"
     },
     {
-      "id": "192.168.1.7",
-      "hostname": "Wistron Device",
-      "mgmtIp": "192.168.1.7",
-      "vendor": "Wistron Neweb Corporation",
+      "id": "192.168.1.13",
+      "hostname": "Intel Device",
+      "mgmtIp": "192.168.1.13",
+      "vendor": "Intel Corporate",
       "model": "Unknown",
       "status": "up",
       "type": "device",
-      "mac": "e0:37:bf:a:17:52",
+      "mac": "1c:99:57:b3:1d:2",
       "discovery_method": "arp_simple",
       "connection_type": "Wireless (2.4GHz/5GHz)",
       "ip_version": "IPv4",
-      "device_name": "Wistron Device"
+      "device_name": "Intel Device"
     },
     {
       "id": "192.168.1.19",
@@ -55,20 +55,6 @@
       "connection_type": "Wireless (2.4GHz/5GHz)",
       "ip_version": "IPv4",
       "device_name": "Device-19"
-    },
-    {
-      "id": "192.168.1.21",
-      "hostname": "Apple, Device",
-      "mgmtIp": "192.168.1.21",
-      "vendor": "Apple, Inc.",
-      "model": "Unknown",
-      "status": "up",
-      "type": "device",
-      "mac": "8c:7a:aa:ec:9f:7f",
-      "discovery_method": "arp_simple",
-      "connection_type": "Wireless (2.4GHz/5GHz)",
-      "ip_version": "IPv4",
-      "device_name": "Apple, Device"
     },
     {
       "id": "192.168.1.22",
@@ -127,5 +113,5 @@
       "device_name": "Device-255"
     }
   ],
-  "last_update": "2025-10-27T09:37:01.589783"
+  "last_update": "2025-10-27T17:17:33.922773"
 }
