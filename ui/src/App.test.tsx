@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { App } from './App'
+import App from './App'
 
 vi.mock('./api', () => ({
   fetchTopology: vi.fn().mockResolvedValue({ nodes: [{ id: 'dev1', label: 'switch1', title: '10.0.0.1' }], edges: [] }),
@@ -12,9 +12,16 @@ vi.mock('./api', () => ({
   fetchDeviceHistory: vi.fn().mockResolvedValue([]),
   fetchDeviceSessionStats: vi.fn().mockResolvedValue(null),
   fetchRecentEvents: vi.fn().mockResolvedValue([]),
-  fetchGroupedDevices: vi.fn().mockResolvedValue({}),
-  fetchGroupingStats: vi.fn().mockResolvedValue({}),
-  getUnknownVendors: vi.fn().mockResolvedValue([])
+    fetchGroupedDevices: vi.fn().mockResolvedValue({}),
+    fetchGroupingStats: vi.fn().mockResolvedValue({}),
+    getUnknownVendors: vi.fn().mockResolvedValue([]),
+    fetchNotifications: vi.fn().mockResolvedValue([]),
+    fetchUnreadNotificationCount: vi.fn().mockResolvedValue({ unread_count: 0 }),
+    markNotificationAsRead: vi.fn().mockResolvedValue({ success: true }),
+    markAllNotificationsAsRead: vi.fn().mockResolvedValue({ success: true, count: 0 }),
+    acknowledgeNotification: vi.fn().mockResolvedValue({ success: true }),
+    fetchNotificationStats: vi.fn().mockResolvedValue({}),
+    createTestNotification: vi.fn().mockResolvedValue({ success: true })
 }))
 
 describe('App', () => {

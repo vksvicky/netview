@@ -47,6 +47,20 @@ class DeviceHistoryService:
         
         db.add(history)
         
+        # Create notification for significant events
+        try:
+            from .notification_service import notification_service
+            event_data = {
+                'previous_status': previous_status,
+                'new_status': new_status,
+                'previous_ip': previous_ip,
+                'new_ip': new_ip
+            }
+            notification_service.process_device_event(db, device_id, event_type, event_data)
+        except Exception:
+            # Don't fail history tracking if notification fails
+            pass
+        
         # Update session tracking for online events
         if event_type == "online":
             self.device_sessions[device_id] = {

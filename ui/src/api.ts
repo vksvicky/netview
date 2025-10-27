@@ -246,4 +246,104 @@ export async function fetchGroupingStats() {
   }
 }
 
+// Notification API functions
+export async function fetchNotifications(params: {
+  limit?: number
+  offset?: number
+  notification_type?: string
+  severity?: string
+  is_read?: boolean
+  days_back?: number
+} = {}) {
+  try {
+    const searchParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, value.toString())
+      }
+    })
+    
+    const resp = await fetch(`${API_BASE}/notifications/notifications?${searchParams}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch notifications:', error)
+    return []
+  }
+}
+
+export async function fetchUnreadNotificationCount() {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/unread-count`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch unread notification count:', error)
+    return { unread_count: 0 }
+  }
+}
+
+export async function markNotificationAsRead(notificationId: number) {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/notifications/${notificationId}/read`, {
+      method: 'PUT'
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to mark notification as read:', error)
+    return { success: false }
+  }
+}
+
+export async function markAllNotificationsAsRead() {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/mark-all-read`, {
+      method: 'PUT'
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to mark all notifications as read:', error)
+    return { success: false }
+  }
+}
+
+export async function acknowledgeNotification(notificationId: number, acknowledgedBy: string = 'user') {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/notifications/${notificationId}/acknowledge?acknowledged_by=${acknowledgedBy}`, {
+      method: 'PUT'
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to acknowledge notification:', error)
+    return { success: false }
+  }
+}
+
+export async function fetchNotificationStats(daysBack: number = 7) {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/notifications/stats?days_back=${daysBack}`)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to fetch notification stats:', error)
+    return {}
+  }
+}
+
+export async function createTestNotification(notificationType: string = 'info', title: string = 'Test Notification', message: string = 'This is a test notification', severity: string = 'info') {
+  try {
+    const resp = await fetch(`${API_BASE}/notifications/test?notification_type=${notificationType}&title=${encodeURIComponent(title)}&message=${encodeURIComponent(message)}&severity=${severity}`, {
+      method: 'POST'
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    return await resp.json()
+  } catch (error) {
+    console.error('Failed to create test notification:', error)
+    return { success: false }
+  }
+}
+
 

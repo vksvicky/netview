@@ -48,6 +48,18 @@ class DiscoveryService:
                 discovered_devices=devices,
                 existing_devices=existing_devices
             )
+            
+            # Create notifications for new devices
+            try:
+                from .notification_service import notification_service
+                for device_data in devices:
+                    device_id = device_data.get("id") or device_data.get("mgmtIp")
+                    if device_id and device_id not in {d.id for d in existing_devices}:
+                        # This is a new device
+                        notification_service.process_new_device(db, device_id, device_data)
+            except Exception:
+                # Don't fail discovery if notification fails
+                pass
             if history_events:
                 print(f"📊 Tracked {len(history_events)} device history events")
                 for event in history_events:

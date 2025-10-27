@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, create_engine, Boolean, Text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 
@@ -89,7 +89,35 @@ class DeviceHistory(Base):
     device = relationship("Device")
 
 
+class Notification(Base):
+    __tablename__ = "notifications"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    notification_type = Column(String, index=True)  # 'new_device', 'device_offline', 'device_online', 'ip_change', 'topology_change', 'security_alert'
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    device_id = Column(String, ForeignKey("devices.id"), index=True)
+    severity = Column(String, default="info")  # 'info', 'warning', 'error', 'critical'
+    is_read = Column(Boolean, default=False, index=True)
+    is_acknowledged = Column(Boolean, default=False, index=True)
+    created_at = Column(DateTime, default=utc_now, index=True)
+    acknowledged_at = Column(DateTime)
+    acknowledged_by = Column(String)  # User who acknowledged
+    notification_data = Column(JSON, default=dict)  # Additional notification metadata
+    device = relationship("Device")
+
+
+class NotificationRule(Base):
+    __tablename__ = "notification_rules"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    notification_type = Column(String, index=True)  # Type of event to monitor
+    conditions = Column(JSON, default=dict)  # Conditions for triggering (e.g., vendor, status, IP range)
+    is_enabled = Column(Boolean, default=True, index=True)
+    severity = Column(String, default="info")
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
-
-

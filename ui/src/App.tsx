@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings, fetchDeviceHistory, fetchDeviceSessionStats, fetchRecentEvents, fetchGroupedDevices, fetchGroupingStats } from './api'
+import { fetchTopology, fetchDevice, fetchInterfaces, fetchInterfaceMetrics, triggerDiscovery, getNetworkStatus, getUnknownVendors, createUserMapping, applyUserMappings, fetchDeviceHistory, fetchDeviceSessionStats, fetchRecentEvents, fetchGroupedDevices, fetchGroupingStats, fetchNotifications, fetchUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, acknowledgeNotification, fetchNotificationStats, createTestNotification } from './api'
 
 console.log('App component loading...')
 
-export const App: React.FC = () => {
+const App: React.FC = () => {
   console.log('App component rendering...')
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [network, setNetwork] = useState<any>(null)
@@ -130,6 +130,9 @@ export const App: React.FC = () => {
         // Also load debug data initially
         await loadDebugData()
         
+        // Load initial notification count
+        await loadUnreadCount()
+        
         if (!network || !isMounted) return
         
         const { DataSet } = await import('vis-network/standalone')
@@ -193,7 +196,7 @@ export const App: React.FC = () => {
   const [networkStatus, setNetworkStatus] = useState<any>({ connected: true, error: null })
   const [debugData, setDebugData] = useState<any>({ unknown_devices: [], count: 0, total_devices: 0 })
   const [debugDataLoaded, setDebugDataLoaded] = useState(false)
-  const [activeTab, setActiveTab] = useState<'devices' | 'debug' | 'history' | 'grouped'>('devices')
+  const [activeTab, setActiveTab] = useState<'devices' | 'debug' | 'history' | 'grouped' | 'notifications'>('devices')
   const [showNetworkAlert, setShowNetworkAlert] = useState(false)
   const [showIdentifyModal, setShowIdentifyModal] = useState(false)
   const [selectedDevice, setSelectedDevice] = useState<any>(null)
@@ -206,6 +209,13 @@ export const App: React.FC = () => {
   const [groupingStats, setGroupingStats] = useState<Record<string, Record<string, number>>>({})
   const [groupBy, setGroupBy] = useState<string>('vendor')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  
+  // Notification state
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [showNotificationPanel, setShowNotificationPanel] = useState(false)
+  const [notificationStats, setNotificationStats] = useState<any>(null)
+  const [notificationsLoading, setNotificationsLoading] = useState(false)
 
   // Add periodic network status checking
   useEffect(() => {
@@ -224,6 +234,10 @@ export const App: React.FC = () => {
             if (isMounted) {
               setRecentEvents(events)
             }
+          }
+          // Load unread notification count
+          if (isMounted) {
+            await loadUnreadCount()
           }
         } catch (error) {
           if (isMounted) {
@@ -271,6 +285,84 @@ export const App: React.FC = () => {
       setGroupingStats(stats)
     } catch (error) {
       console.error('Failed to load grouping stats:', error)
+    }
+  }
+
+  // Notification functions
+  const loadNotifications = async () => {
+    try {
+      setNotificationsLoading(true)
+      const notifs = await fetchNotifications({ limit: 50, days_back: 7 })
+      setNotifications(notifs)
+    } catch (error) {
+      console.error('Failed to load notifications:', error)
+    } finally {
+      setNotificationsLoading(false)
+    }
+  }
+
+  const loadUnreadCount = async () => {
+    try {
+      const result = await fetchUnreadNotificationCount()
+      setUnreadCount(result.unread_count || 0)
+    } catch (error) {
+      console.error('Failed to load unread count:', error)
+    }
+  }
+
+  const loadNotificationStats = async () => {
+    try {
+      const stats = await fetchNotificationStats(7)
+      setNotificationStats(stats)
+    } catch (error) {
+      console.error('Failed to load notification stats:', error)
+    }
+  }
+
+  const handleMarkAsRead = async (notificationId: number) => {
+    try {
+      await markNotificationAsRead(notificationId)
+      // Update local state
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
+      )
+      setUnreadCount(prev => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error)
+    }
+  }
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllNotificationsAsRead()
+      // Update local state
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error)
+    }
+  }
+
+  const handleAcknowledge = async (notificationId: number) => {
+    try {
+      await acknowledgeNotification(notificationId, 'user')
+      // Update local state
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, is_acknowledged: true } : n)
+      )
+    } catch (error) {
+      console.error('Failed to acknowledge notification:', error)
+    }
+  }
+
+  const createTestNotificationHandler = async () => {
+    try {
+      await createTestNotification('info', 'Test Notification', 'This is a test notification from the UI', 'info')
+      // Reload notifications
+      await loadNotifications()
+      await loadUnreadCount()
+    } catch (error) {
+      console.error('Failed to create test notification:', error)
     }
   }
 
@@ -445,6 +537,51 @@ export const App: React.FC = () => {
         <button onClick={onSearch}>Search</button>
         <button onClick={onDiscoverNow}>Discover now</button>
         <button onClick={checkNetworkStatus}>Refresh Network Status</button>
+        
+        {/* Notification Bell */}
+        <div style={{ position: 'relative', marginLeft: '16px' }}>
+          <button 
+            onClick={() => {
+              setShowNotificationPanel(!showNotificationPanel)
+              if (!showNotificationPanel) {
+                loadNotifications()
+                loadNotificationStats()
+              }
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              padding: '4px',
+              borderRadius: '4px',
+              position: 'relative'
+            }}
+            title="Notifications"
+          >
+            🔔
+            {unreadCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-2px',
+                right: '-2px',
+                background: '#ff4444',
+                color: 'white',
+                borderRadius: '50%',
+                width: '16px',
+                height: '16px',
+                fontSize: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 'bold'
+              }}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+        
         <div style={{ marginLeft: 'auto', fontSize: '12px', display: 'flex', gap: '16px' }}>
           <span style={{ color: connectionStatus === 'connected' ? 'green' : connectionStatus === 'error' ? 'red' : 'orange' }}>
             Backend: {connectionStatus}
@@ -454,6 +591,223 @@ export const App: React.FC = () => {
           </span>
         </div>
       </div>
+      
+      {/* Notification Panel */}
+      {showNotificationPanel && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '20px',
+          width: '400px',
+          maxHeight: '600px',
+          background: 'white',
+          border: '1px solid #ddd',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 1001,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* Notification Header */}
+          <div style={{
+            padding: '16px',
+            borderBottom: '1px solid #eee',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <h3 style={{ margin: 0, fontSize: '16px' }}>🔔 Notifications</h3>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={createTestNotificationHandler}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  background: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Test
+              </button>
+              <button
+                onClick={handleMarkAllAsRead}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  background: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Mark All Read
+              </button>
+              <button
+                onClick={() => setShowNotificationPanel(false)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          
+          {/* Notification Stats */}
+          {notificationStats && (
+            <div style={{
+              padding: '12px 16px',
+              background: '#f8f9fa',
+              borderBottom: '1px solid #eee',
+              fontSize: '12px'
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                <div><strong>Total:</strong> {notificationStats.total_notifications}</div>
+                <div><strong>Unread:</strong> {notificationStats.unread_notifications}</div>
+                <div><strong>Info:</strong> {notificationStats.by_severity?.info || 0}</div>
+                <div><strong>Warning:</strong> {notificationStats.by_severity?.warning || 0}</div>
+                <div><strong>Critical:</strong> {notificationStats.by_severity?.critical || 0}</div>
+                <div><strong>Period:</strong> {notificationStats.period_days} days</div>
+              </div>
+            </div>
+          )}
+          
+          {/* Notifications List */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            maxHeight: '400px'
+          }}>
+            {notificationsLoading ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                Loading notifications...
+              </div>
+            ) : notifications.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                No notifications
+              </div>
+            ) : (
+              notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  style={{
+                    padding: '12px 16px',
+                    borderBottom: '1px solid #eee',
+                    background: notification.is_read ? 'white' : '#f8f9fa',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => !notification.is_read && handleMarkAsRead(notification.id)}
+                >
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: '4px'
+                  }}>
+                    <div style={{
+                      fontWeight: notification.is_read ? 'normal' : 'bold',
+                      fontSize: '14px',
+                      color: notification.severity === 'critical' ? '#dc3545' : 
+                             notification.severity === 'warning' ? '#ffc107' : '#333'
+                    }}>
+                      {notification.title}
+                    </div>
+                    <div style={{
+                      fontSize: '10px',
+                      color: '#666',
+                      whiteSpace: 'nowrap',
+                      marginLeft: '8px'
+                    }}>
+                      {new Date(notification.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#666',
+                    marginBottom: '8px'
+                  }}>
+                    {notification.message}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div style={{
+                      fontSize: '10px',
+                      color: '#666',
+                      display: 'flex',
+                      gap: '8px'
+                    }}>
+                      <span style={{
+                        background: notification.severity === 'critical' ? '#dc3545' : 
+                                   notification.severity === 'warning' ? '#ffc107' : '#007bff',
+                        color: 'white',
+                        padding: '2px 6px',
+                        borderRadius: '3px'
+                      }}>
+                        {notification.severity}
+                      </span>
+                      <span>{notification.notification_type}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {!notification.is_read && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleMarkAsRead(notification.id)
+                          }}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            background: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Mark Read
+                        </button>
+                      )}
+                      {!notification.is_acknowledged && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleAcknowledge(notification.id)
+                          }}
+                          style={{
+                            padding: '2px 6px',
+                            fontSize: '10px',
+                            background: '#17a2b8',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Ack
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      
       <div style={{ flex: 1, display: 'flex' }}>
         <div style={{ height: '100%', width: '100%', background: '#f9f9f9', position: 'relative' }}>
           <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(255,255,255,0.9)', padding: 10, borderRadius: 4, fontSize: '12px', zIndex: 1000 }}>
@@ -1176,5 +1530,7 @@ export const App: React.FC = () => {
     </div>
   )
 }
+
+export default App
 
 

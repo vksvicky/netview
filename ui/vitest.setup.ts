@@ -7,6 +7,9 @@ let cleanupFunctions: (() => void)[] = []
 beforeEach(() => {
   // Clear any existing cleanup functions
   cleanupFunctions = []
+  
+  // Clear all timers before each test
+  vi.clearAllTimers()
 })
 
 afterEach(() => {
@@ -30,6 +33,29 @@ afterEach(() => {
   
   // Clear all mocks
   vi.clearAllMocks()
+  
+  // Clear any remaining timeouts/intervals
+  if (typeof window !== 'undefined') {
+    // Clear all timeouts and intervals
+    const highestTimeoutId = setTimeout(() => {}, 0)
+    const highestIntervalId = setInterval(() => {}, 0)
+    
+    for (let i = 0; i < highestTimeoutId; i++) {
+      clearTimeout(i)
+    }
+    for (let i = 0; i < highestIntervalId; i++) {
+      clearInterval(i)
+    }
+    
+    // Clear the test timeouts/intervals
+    clearTimeout(highestTimeoutId)
+    clearInterval(highestIntervalId)
+  }
+  
+  // Wait for any pending promises to resolve
+  return new Promise(resolve => {
+    setTimeout(resolve, 0)
+  })
 })
 
 // Add cleanup function to global registry
@@ -64,6 +90,15 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     transform: vi.fn(),
     rect: vi.fn(),
     clip: vi.fn(),
+    canvas: {
+      width: 800,
+      height: 600,
+      offsetWidth: 800,
+      offsetHeight: 600,
+      clientWidth: 800,
+      clientHeight: 600,
+      webkitBackingStorePixelRatio: 1
+    }
   }),
 })
 
@@ -75,6 +110,39 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'width', {
 
 Object.defineProperty(HTMLCanvasElement.prototype, 'height', {
   value: 600,
+  writable: true
+})
+
+// Mock additional canvas properties that vis-network needs
+Object.defineProperty(HTMLCanvasElement.prototype, 'offsetWidth', {
+  value: 800,
+  writable: true
+})
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'offsetHeight', {
+  value: 600,
+  writable: true
+})
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'clientWidth', {
+  value: 800,
+  writable: true
+})
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'clientHeight', {
+  value: 600,
+  writable: true
+})
+
+// Mock devicePixelRatio
+Object.defineProperty(window, 'devicePixelRatio', {
+  value: 1,
+  writable: true
+})
+
+// Mock webkitBackingStorePixelRatio
+Object.defineProperty(HTMLCanvasElement.prototype, 'webkitBackingStorePixelRatio', {
+  value: 1,
   writable: true
 })
 

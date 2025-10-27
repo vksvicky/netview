@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { App } from './App'
+import App from './App'
 
 // Mock the API functions
 vi.mock('./api', () => ({
@@ -29,9 +29,16 @@ vi.mock('./api', () => ({
   fetchDeviceHistory: vi.fn(),
   fetchDeviceSessionStats: vi.fn(),
   fetchRecentEvents: vi.fn(),
-  fetchGroupedDevices: vi.fn().mockResolvedValue({}),
-  fetchGroupingStats: vi.fn().mockResolvedValue({}),
-  getUnknownVendors: vi.fn().mockResolvedValue([])
+    fetchGroupedDevices: vi.fn().mockResolvedValue({}),
+    fetchGroupingStats: vi.fn().mockResolvedValue({}),
+    getUnknownVendors: vi.fn().mockResolvedValue([]),
+    fetchNotifications: vi.fn().mockResolvedValue([]),
+    fetchUnreadNotificationCount: vi.fn().mockResolvedValue({ unread_count: 0 }),
+    markNotificationAsRead: vi.fn().mockResolvedValue({ success: true }),
+    markAllNotificationsAsRead: vi.fn().mockResolvedValue({ success: true, count: 0 }),
+    acknowledgeNotification: vi.fn().mockResolvedValue({ success: true }),
+    fetchNotificationStats: vi.fn().mockResolvedValue({}),
+    createTestNotification: vi.fn().mockResolvedValue({ success: true })
 }))
 
 describe('Device Grouping Feature', () => {
